@@ -34,6 +34,8 @@ const listQuery = z.object({
   member: z.coerce.number().int().positive().optional(),
   milestone: z.coerce.number().int().positive().optional(),
   due: z.enum(['today', 'overdue', 'week', 'none', 'scheduled']).optional(),
+  from: zDate.optional(),
+  to: zDate.optional(),
   q: z.string().trim().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
@@ -59,6 +61,8 @@ export function taskFilter(q: z.infer<typeof listQuery>) {
   }
   if (q.due === 'none') where.push('t.due_date IS NULL');
   if (q.due === 'scheduled') where.push('t.due_date IS NOT NULL');
+  if (q.from) (where.push('t.due_date >= @from'), (params.from = q.from));
+  if (q.to) (where.push('t.due_date <= @to'), (params.to = q.to));
   if (q.q) (where.push('(t.title LIKE @q OR t.notes LIKE @q)'), (params.q = `%${q.q}%`));
   return { where: where.length ? where.join(' AND ') : '1=1', params, limit: q.limit };
 }

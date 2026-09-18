@@ -23,8 +23,8 @@ const FILTERS: { key: string; label: string }[] = [
 export function Projects() {
   const me = useCurrentMember();
   const { data: household } = useHousehold();
-  const { view } = usePrefs();
-  const mine = view === 'mine' && !!me;
+  const { projectsView } = usePrefs();
+  const mine = projectsView === 'mine' && !!me;
   const navigate = useNavigate();
   const [filter, setFilter] = useState('open');
   const q = { status: filter, member: mine ? me!.id : undefined };
@@ -40,7 +40,7 @@ export function Projects() {
           <p className="sub">Everything you're building, fixing, and dreaming up at home.</p>
         </div>
         <div className="row">
-          {me && <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ view: v })} options={[{ value: 'everyone', label: 'Everyone' }, { value: 'mine', label: 'Mine' }]} />}
+          {me && <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ projectsView: v })} options={[{ value: 'mine', label: 'Mine' }, { value: 'everyone', label: 'Everyone' }]} />}
           <Button variant="primary" icon={Plus} onClick={() => setCreating(true)} className="hide-mobile">New project</Button>
         </div>
       </header>
@@ -59,7 +59,7 @@ export function Projects() {
         </div>
       ) : (
         <div className="card">
-          <Empty icon={Hammer} title={filter === 'open' ? 'No projects yet' : 'Nothing here'} hint={filter === 'open' ? 'Start with something small, like fixing that squeaky door.' : undefined} />
+          <Empty icon={Hammer} title={filter === 'open' ? (mine ? 'No projects of yours yet' : 'No projects yet') : 'Nothing here'} hint={filter === 'open' ? (mine ? 'Start one, or switch to Everyone to see the whole household.' : 'Start with something small, like fixing that squeaky door.') : undefined} />
         </div>
       )}
 

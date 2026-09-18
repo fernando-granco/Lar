@@ -1,6 +1,6 @@
 /* Lar service worker: makes the app installable and keeps the shell loading
    when the network is slow. Data always comes from the server. */
-const VERSION = 'lar-v1';
+const VERSION = 'lar-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
@@ -36,7 +36,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && res.type === 'basic' && new URL(res.url).origin === self.location.origin) {
           const copy = res.clone();
           caches.open(VERSION).then((cache) => cache.put(req.mode === 'navigate' ? '/' : req, copy));
         }

@@ -17,7 +17,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: 'http://localhost:3000', changeOrigin: true },
       '/mcp': { target: 'http://localhost:3000', changeOrigin: true },
-      '/calendar': { target: 'http://localhost:3000', changeOrigin: true },
+      '/calendar/': { target: 'http://localhost:3000', changeOrigin: true },
     },
   },
 });

@@ -7,6 +7,7 @@ import { Shopping } from './pages/Shopping';
 import { Projects } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { Household } from './pages/Household';
+import { CalendarPage } from './pages/Calendar';
 import { Welcome } from './pages/Welcome';
 
 export function App() {
@@ -33,6 +34,7 @@ export function App() {
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/household" element={<Household />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
     </Layout>

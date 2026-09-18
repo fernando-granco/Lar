@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckSquare, ShoppingBasket, Hammer, Plus, ArrowRight, Activity as ActivityIcon, CalendarDays } from 'lucide-react';
+import { CheckSquare, ShoppingBasket, Hammer, Plus, ArrowRight, Activity as ActivityIcon, CalendarDays, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { keys, useHousehold, useSummary, useCurrentMember } from '@/lib/hooks';
 import { greeting, friendlyDate, timeAgo, today, addDays } from '@/lib/format';
@@ -21,8 +21,10 @@ export function Today() {
   const { data: summary } = useSummary();
   const tasksQ = useQuery({ queryKey: keys.tasks({ status: 'open', member: me?.id }), queryFn: () => api.tasks({ status: 'open', member: me?.id }) });
   const shopQ = useQuery({ queryKey: keys.shoppingItems({ list: 1, status: 'open', member: me?.id }), queryFn: () => api.shoppingItems({ list: 1, status: 'open', member: me?.id }) });
-  const projQ = useQuery({ queryKey: keys.projects({ status: 'active' }), queryFn: () => api.projects({ status: 'active' }) });
-  const actQ = useQuery({ queryKey: keys.activity({ limit: 8 }), queryFn: () => api.activity({ limit: 8 }) });
+  const projQ = useQuery({ queryKey: keys.projects({ status: 'active', member: me?.id }), queryFn: () => api.projects({ status: 'active', member: me?.id }) });
+  const allProjQ = useQuery({ queryKey: keys.projects({ status: 'all' }), queryFn: () => api.projects({ status: 'all' }) });
+  const [showActivity, setShowActivity] = useState(false);
+  const actQ = useQuery({ queryKey: keys.activity({ limit: 12 }), queryFn: () => api.activity({ limit: 12 }), enabled: showActivity });
   const [editTask, setEditTask] = useState<Task | null | 'new'>(null);
   const [editItem, setEditItem] = useState<ShoppingItem | null | 'new'>(null);
 
@@ -31,7 +33,7 @@ export function Today() {
   const tasks = tasksQ.data ?? [];
   const attention = tasks.filter((x) => x.due_date && x.due_date <= t);
   const upcoming = tasks.filter((x) => x.due_date && x.due_date > t && x.due_date <= weekEnd);
-  const projectName = (id: number | null) => projQ.data?.find((p) => p.id === id)?.name;
+  const projectName = (id: number | null) => allProjQ.data?.find((p) => p.id === id)?.name;
   const dateLine = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
@@ -43,6 +45,7 @@ export function Today() {
           <p className="sub">{summaryLine(summary)}</p>
         </div>
         <div className="row">
+          <Link to="/calendar" className="btn btn-secondary" aria-label="Calendar" title="Calendar"><CalendarDays /><span className="hide-mobile">Calendar</span></Link>
           <Button icon={Plus} onClick={() => setEditItem('new')} className="hide-mobile">Shopping item</Button>
           <Button variant="primary" icon={Plus} onClick={() => setEditTask('new')}>To-do</Button>
         </div>
@@ -96,7 +99,8 @@ export function Today() {
 
       <CalendarCard />
 
-      <Card title="Projects in motion" icon={Hammer} action={<Link to="/projects" className="btn btn-ghost btn-sm">All projects <ArrowRight /></Link>}>
+      {!!projQ.data?.length && (
+      <Card title={me ? 'Your projects in motion' : 'Projects in motion'} icon={Hammer} action={<Link to="/projects" className="btn btn-ghost btn-sm">All projects <ArrowRight /></Link>}>
         {projQ.data?.length ? (
           <div className="project-grid">
             {projQ.data.slice(0, 3).map((p) => {
@@ -120,25 +124,35 @@ export function Today() {
               );
             })}
           </div>
-        ) : (
-          <Empty icon={Hammer} title="No active projects" hint="Start one from the Projects page." />
-        )}
+        ) : null}
       </Card>
-
-      {actQ.data && actQ.data.length > 0 && (
-        <Card title="Recent activity" icon={ActivityIcon} flush>
-          <div className="list">
-            {actQ.data.map((a) => (
-              <div key={a.id} className="activity-row">
-                <span><b>{a.actor_name}</b> <span className="muted">{lower(a.summary)}</span></span>
-                <span className="when">{timeAgo(a.created_at)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
       )}
 
-      <TaskSheet open={editTask !== null} onClose={() => setEditTask(null)} task={editTask === 'new' ? null : editTask} projects={projQ.data} />
+      <section className="card">
+        <button type="button" className="card-head" style={{ width: '100%', textAlign: 'left', paddingBottom: showActivity ? 6 : 16 }} onClick={() => setShowActivity((v) => !v)} aria-expanded={showActivity}>
+          <span className="icon-badge"><ActivityIcon /></span>
+          <h2 className="grow">Recent activity</h2>
+          {showActivity ? <ChevronDown size={18} className="faint" /> : <ChevronRight size={18} className="faint" />}
+        </button>
+        {showActivity && (
+          <div className="card-body flush">
+            {actQ.data?.length ? (
+              <div className="list">
+                {actQ.data.map((a) => (
+                  <div key={a.id} className="activity-row">
+                    <span><b>{a.actor_name}</b> <span className="muted">{lower(a.summary)}</span></span>
+                    <span className="when">{timeAgo(a.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : actQ.isLoading ? null : (
+              <Empty icon={ActivityIcon} title="Nothing yet" />
+            )}
+          </div>
+        )}
+      </section>
+
+      <TaskSheet open={editTask !== null} onClose={() => setEditTask(null)} task={editTask === 'new' ? null : editTask} projects={allProjQ.data?.filter((p) => p.status !== 'done')} />
       <ShoppingItemSheet open={editItem !== null} onClose={() => setEditItem(null)} item={editItem === 'new' ? null : editItem} listId={1} />
       {household && null}
     </div>

@@ -246,16 +246,8 @@ ul {
 .brand-mark {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
-  background: var(--primary);
-  display: grid;
-  place-items: center;
-  color: #fff;
   flex-shrink: 0;
-}
-.brand-mark svg {
-  width: 18px;
-  height: 18px;
+  display: block;
 }
 .brand small {
   display: block;
@@ -1332,6 +1324,138 @@ ul {
   white-space: nowrap;
 }
 
+/* ---------- Calendar page ---------- */
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+.cal-weekday {
+  padding: 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-align: center;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.cal-cell {
+  min-height: 96px;
+  padding: 6px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.12s;
+  min-width: 0;
+}
+.cal-cell:hover {
+  background: var(--surface-2);
+}
+.cal-cell.other {
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+  color: var(--text-3);
+}
+.cal-cell.selected {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+.cal-day {
+  font-size: 13px;
+  font-weight: 600;
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.cal-cell.today .cal-day {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.cal-chip {
+  font-size: 11.5px;
+  line-height: 1.3;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-left: 3px solid var(--primary);
+}
+.cal-chip.done {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.cal-chip.milestone {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+.cal-chip.event {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.cal-more {
+  font-size: 11px;
+  color: var(--text-3);
+  padding-left: 4px;
+}
+.cal-dots {
+  display: none;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.cal-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.cal-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.cal-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+@media (max-width: 720px) {
+  .cal-cell {
+    min-height: 58px;
+    padding: 4px;
+    align-items: center;
+  }
+  .cal-chip,
+  .cal-more {
+    display: none;
+  }
+  .cal-dots {
+    display: flex;
+    justify-content: center;
+  }
+  .cal-weekday {
+    padding: 6px 2px;
+    font-size: 10px;
+  }
+}
+
 /* ---------- Toast ---------- */
 .toast-host {
   position: fixed;
@@ -1414,11 +1538,6 @@ ul {
   .topbar .brand-mark {
     width: 26px;
     height: 26px;
-    border-radius: 8px;
-  }
-  .topbar .brand-mark svg {
-    width: 15px;
-    height: 15px;
   }
   .topbar .avatar {
     margin-left: auto;

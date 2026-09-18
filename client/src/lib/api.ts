@@ -1,6 +1,6 @@
 import type {
   Household, Member, Group, Settings, Task, ShoppingList, ShoppingItem, Project, ProjectDetail,
-  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent,
+  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent, Agenda,
 } from '@shared/types';
 import { getCurrentMemberId } from './store';
 
@@ -58,7 +58,7 @@ export const api = {
   updateGroup: (id: number, g: Partial<Pick<Group, 'name' | 'color' | 'member_ids'>>) => patch<Group>(`/groups/${id}`, g),
   deleteGroup: (id: number) => del(`/groups/${id}`),
 
-  tasks: (p: { status?: 'open' | 'done' | 'all'; project?: number | 'none' | 'any'; member?: number; due?: string; q?: string; limit?: number } = {}) =>
+  tasks: (p: { status?: 'open' | 'done' | 'all'; project?: number | 'none' | 'any'; member?: number; due?: string; from?: string; to?: string; q?: string; limit?: number } = {}) =>
     get<Task[]>(`/tasks${qs(p)}`),
   createTask: (t: TaskInput & { title: string }) => post<Task>('/tasks', t),
   updateTask: (id: number, t: TaskInput) => patch<Task>(`/tasks/${id}`, t),
@@ -99,6 +99,7 @@ export const api = {
   updateCalendar: (id: number, c: Partial<Pick<Calendar, 'name' | 'url' | 'color' | 'enabled'>>) => patch<Calendar>(`/calendars/${id}`, c),
   deleteCalendar: (id: number) => del(`/calendars/${id}`),
   calendarEvents: (days = 7) => get<{ today: string; events: CalendarEvent[] }>(`/calendar/events${qs({ days })}`),
+  agenda: (p: { from: string; to: string; member?: number }) => get<Agenda>(`/calendar/agenda${qs(p)}`),
   feedInfo: () => get<{ token: string; path: string }>('/calendar/feed-info'),
   rotateFeedToken: () => post<{ token: string; path: string }>('/calendar/feed-token/rotate'),
 

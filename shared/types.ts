@@ -202,6 +202,16 @@ export interface Calendar {
   last_error: string | null;
 }
 
+/** Everything with a date in a range: for the calendar page. */
+export interface Agenda {
+  from: string;
+  to: string;
+  tasks: Task[];
+  milestones: { id: number; project_id: number; project_name: string; color: string; title: string; due_date: string; done: boolean }[];
+  projects: { id: number; name: string; color: string; target_date: string; status: ProjectStatus }[];
+  events: CalendarEvent[];
+}
+
 export interface CalendarEvent {
   calendar_id: number;
   calendar: string;

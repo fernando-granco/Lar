@@ -8,6 +8,7 @@ type Prefs = {
   memberId: number | null;
   theme: 'system' | 'light' | 'dark';
   view: 'mine' | 'everyone';
+  projectsView: 'mine' | 'everyone';
 };
 
 const KEY = 'lar.prefs';
@@ -16,11 +17,11 @@ const listeners = new Set<() => void>();
 function read(): Prefs {
   try {
     const raw = localStorage.getItem(KEY) ?? localStorage.getItem('homebase.prefs');
-    if (raw) return { memberId: null, theme: 'system', view: 'everyone', ...JSON.parse(raw) };
+    if (raw) return { memberId: null, theme: 'system', view: 'everyone', projectsView: 'mine', ...JSON.parse(raw) };
   } catch {
     /* ignore */
   }
-  return { memberId: null, theme: 'system', view: 'everyone' };
+  return { memberId: null, theme: 'system', view: 'everyone', projectsView: 'mine' };
 }
 
 let state: Prefs = read();

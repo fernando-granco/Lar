@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, CheckSquare, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { Plus, CheckSquare, ChevronDown, ChevronRight, Sparkles, CalendarDays } from 'lucide-react';
 import { api } from '@/lib/api';
 import { keys, useCurrentMember, useInvalidatingMutation } from '@/lib/hooks';
 import { usePrefs, setPrefs } from '@/lib/store';
@@ -76,6 +77,7 @@ export function Todos() {
           {me && (
             <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ view: v })} options={[{ value: 'everyone', label: 'Everyone' }, { value: 'mine', label: 'Mine' }]} />
           )}
+          <Link to="/calendar" className="btn btn-secondary" aria-label="Calendar" title="Calendar"><CalendarDays /><span className="hide-mobile">Calendar</span></Link>
           <Button variant="primary" icon={Plus} onClick={() => setEdit('new')} className="hide-mobile">New to-do</Button>
         </div>
       </header>

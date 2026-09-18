@@ -84,6 +84,15 @@ Two directions, no OAuth setup required:
 - **Lar in your calendar.** The Household page shows a private feed address (`/calendar/lar.ics?token=…`). Subscribe to it from Google Calendar (Other calendars → From URL) or Apple Calendar (File → New Calendar Subscription) and to-do due dates, milestones, and project target dates appear there. You can pick a feed for one person's items only.
 - **Your calendars in Lar.** Paste the private iCal link of a Google, iCloud, Outlook, or school calendar and the next days' events show on the Today page. Recurring events are expanded, links are refreshed every ten minutes.
 
+## Behind Cloudflare Access (or any auth proxy)
+
+Lar works behind Cloudflare Access, Authelia, or a similar login layer with two adjustments:
+
+- **Calendar feed.** Google and Apple fetch `/calendar/lar.ics` without a browser session, so a login page breaks the subscription. Add an Access application for the path `your-domain/calendar/*` with a **Bypass** policy. The feed stays protected by its own token.
+- **Agents and scripts.** Requests to `/mcp` and `/api/v1` must pass Access. Either give the agent a Cloudflare **Service Token** and send the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers, or let an agent on your home network use the LAN address directly and skip the tunnel. Set `LAR_API_KEY` as well if the API is reachable from outside.
+
+The browser app, live updates, and the iCal links you import all work unchanged. Access identifies who logged in, so a future version can pick the household member from that automatically.
+
 ## Backup
 
 The Household page has **Download backup**, which gives you one JSON file with everything, and **Restore from file**, which replaces all data with a backup. The same is available at `GET /api/v1/backup` and `POST /api/v1/restore` for scripts and cron jobs.

@@ -6,13 +6,7 @@ import { Avatar } from './ui';
 import { MemberPicker } from './MemberPicker';
 
 export function BrandMark() {
-  return (
-    <span className="brand-mark" aria-hidden>
-      <svg viewBox="0 0 64 64" fill="currentColor">
-        <path d="M32 14 12 31h6v19h12V38h4v12h12V31h6z" />
-      </svg>
-    </span>
-  );
+  return <img className="brand-mark" src="/lar.png" alt="" width={30} height={30} aria-hidden />;
 }
 
 const NAV = [

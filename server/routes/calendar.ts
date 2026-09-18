@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import ical, { type VEvent, type CalendarResponse } from 'node-ical';
 import { db, getSetting, nowIso } from '../db.js';
-import { handler, parse, idParam, notFound, badRequest, zColor } from '../http.js';
+import { handler, parse, idParam, notFound, badRequest, zColor, zDate } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { loadTasks, assignedToMemberSql, todayIso } from '../repo.js';
 import type { Calendar, CalendarEvent } from '../../shared/types.js';
@@ -208,6 +208,10 @@ export async function upcomingEvents(days: number): Promise<CalendarEvent[]> {
   from.setHours(0, 0, 0, 0);
   const to = new Date(from);
   to.setDate(to.getDate() + days);
+  return eventsBetween(from, to);
+}
+
+export async function eventsBetween(from: Date, to: Date): Promise<CalendarEvent[]> {
   const out: CalendarEvent[] = [];
   for (const cal of listCalendars().filter((c) => c.enabled)) {
     try {
@@ -246,6 +250,35 @@ export async function upcomingEvents(days: number): Promise<CalendarEvent[]> {
   }
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
+
+/** Everything dated inside a range: to-dos, milestones, project targets, and external events. */
+calendar.get(
+  '/calendar/agenda',
+  handler(async (req) => {
+    const q = parse(z.object({ from: zDate, to: zDate, member: z.coerce.number().int().positive().optional() }), req.query);
+    const params: Record<string, unknown> = { from: q.from, to: q.to, member: q.member };
+    const taskWhere = ['t.due_date >= @from', 't.due_date <= @to'];
+    if (q.member) taskWhere.push(assignedToMemberSql('task', 't'));
+    const memberSql = q.member ? 'AND (p.owner_id = @member OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.member_id = @member))' : '';
+    const milestones = db
+      .prepare(`SELECT m.id, m.project_id, p.name AS project_name, p.color, m.title, m.due_date, (m.done_at IS NOT NULL) AS done FROM milestones m JOIN projects p ON p.id = m.project_id WHERE m.due_date >= @from AND m.due_date <= @to AND p.archived = 0 ${memberSql} ORDER BY m.due_date`)
+      .all(params) as any[];
+    const projects = db
+      .prepare(`SELECT p.id, p.name, p.color, p.target_date, p.status FROM projects p WHERE p.target_date >= @from AND p.target_date <= @to AND p.archived = 0 ${memberSql} ORDER BY p.target_date`)
+      .all(params) as any[];
+    const [fy, fm, fd] = q.from.split('-').map(Number);
+    const [ty, tm, td] = q.to.split('-').map(Number);
+    const events = listCalendars().some((c) => c.enabled) ? await eventsBetween(new Date(fy!, fm! - 1, fd!), new Date(ty!, tm! - 1, td!, 23, 59, 59)) : [];
+    return {
+      from: q.from,
+      to: q.to,
+      tasks: loadTasks(taskWhere.join(' AND '), params),
+      milestones: milestones.map((m) => ({ ...m, done: !!m.done })),
+      projects,
+      events,
+    };
+  }),
+);
 
 calendar.get(
   '/calendar/events',
