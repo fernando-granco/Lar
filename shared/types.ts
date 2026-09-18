@@ -191,3 +191,24 @@ export interface ChangeEvent {
   action: 'created' | 'updated' | 'deleted' | 'reordered';
   actor?: string;
 }
+
+export interface Calendar {
+  id: number;
+  name: string;
+  url: string;
+  color: string;
+  enabled: boolean;
+  last_fetched_at: string | null;
+  last_error: string | null;
+}
+
+export interface CalendarEvent {
+  calendar_id: number;
+  calendar: string;
+  color: string;
+  title: string;
+  start: string; // YYYY-MM-DD for all-day events, ISO datetime otherwise
+  end: string;
+  all_day: boolean;
+  location?: string;
+}

@@ -62,11 +62,31 @@ curl -X POST http://YOUR-SERVER-IP:3001/api/v1/shopping/items \
   -d '{"name":"Oat milk","quantity":2}'
 ```
 
+## Agents (MCP)
+
+Homebase is an MCP server. Point any Model Context Protocol client at `http://YOUR-SERVER-IP:3001/mcp` (Streamable HTTP, stateless) and it gets tools such as `homebase_overview`, `list_todos`, `add_todo`, `complete_todo`, `add_shopping_items`, `check_shopping_items`, `list_projects`, `get_project`, `add_milestone`, and `add_expense`. Tools take people and projects by name, so "add oat milk for Fernando" just works.
+
+Send `X-Homebase-Agent: <name>` so the activity log says who did it. If `HOMEBASE_API_KEY` is set, also send `Authorization: Bearer <key>`.
+
+Claude Code:
+
+```bash
+claude mcp add --transport http homebase http://YOUR-SERVER-IP:3001/mcp --header "X-Homebase-Agent: claude"
+```
+
+Hermes Agent or any other MCP-aware agent: add an HTTP MCP server with the same URL and headers. Agents without MCP support can use the REST API above; `GET /api/v1` lists every route.
+
+## Calendars
+
+Two directions, no OAuth setup required:
+
+- **Homebase in your calendar.** The Household page shows a private feed address (`/calendar/homebase.ics?token=…`). Subscribe to it from Google Calendar (Other calendars → From URL) or Apple Calendar (File → New Calendar Subscription) and to-do due dates, milestones, and project target dates appear there. You can pick a feed for one person's items only.
+- **Your calendars in Homebase.** Paste the private iCal link of a Google, iCloud, Outlook, or school calendar and the next days' events show on the Today page. Recurring events are expanded, links are refreshed every ten minutes.
+
 ## Roadmap
 
-- Agent access through the Model Context Protocol (MCP), so Hermes Agent, Claude, and others can use Homebase as a tool.
-- Calendar: an iCal feed you can subscribe to from Google or Apple Calendar, then two-way sync.
 - Backup and restore from the Household page.
+- Direct Google and Apple account sync (OAuth / CalDAV) once the feed approach is not enough.
 
 ## Development
 

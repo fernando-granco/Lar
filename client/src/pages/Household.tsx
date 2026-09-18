@@ -7,6 +7,7 @@ import { Card, Button, Field, Input, Select, Avatar, IconButton, ColorDots, Chip
 import { Sheet, Confirm } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import type { Member, Group } from '@shared/types';
+import { CalendarsCard } from '@/components/CalendarsCard';
 
 export function Household() {
   const { data } = useHousehold();
@@ -118,13 +119,19 @@ export function Household() {
           </div>
         </Card>
 
-        <Card title="Connections" icon={Plug}>
+        <Card title="Agents & API" icon={Plug}>
           <div className="stack" style={{ gap: 14 }}>
             <div>
-              <b style={{ fontSize: 14 }}>API for agents and scripts</b>
+              <b style={{ fontSize: 14 }}>Let an agent use Homebase</b>
               <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
-                Anything on your network can read and change Homebase through its REST API. Agent tooling (MCP) and calendar sync arrive in the next releases.
+                Homebase is an MCP server. Add this address to Hermes Agent, Claude, or any Model Context Protocol client and it can read and change to-dos, shopping, and projects by name.
               </p>
+              <code className="mono" style={{ display: 'block', marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 8, wordBreak: 'break-all' }}>{origin}/mcp</code>
+              <p className="faint" style={{ fontSize: 12.5, marginTop: 6 }}>Send an <code className="mono">X-Homebase-Agent</code> header with the agent's name so the activity log shows who did what.</p>
+            </div>
+            <div>
+              <b style={{ fontSize: 14 }}>REST API for scripts</b>
+              <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>Everything the app does is available as JSON. Open the address for a map of all routes.</p>
               <code className="mono" style={{ display: 'block', marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 8, wordBreak: 'break-all' }}>{origin}/api/v1</code>
             </div>
             <div>
@@ -136,6 +143,8 @@ export function Household() {
           </div>
         </Card>
       </div>
+
+      <CalendarsCard />
 
       <MemberSheet open={memberSheet !== null} member={memberSheet === 'new' ? null : memberSheet} onClose={() => setMemberSheet(null)} />
       <GroupSheet open={groupSheet !== null} group={groupSheet === 'new' ? null : groupSheet} members={data?.members ?? []} onClose={() => setGroupSheet(null)} />

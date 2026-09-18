@@ -1,6 +1,6 @@
 import type {
   Household, Member, Group, Settings, Task, ShoppingList, ShoppingItem, Project, ProjectDetail,
-  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence,
+  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent,
 } from '@shared/types';
 import { getCurrentMemberId } from './store';
 
@@ -93,6 +93,14 @@ export const api = {
   deleteExpense: (id: number) => del(`/expenses/${id}`),
   createLink: (projectId: number, l: { label: string; url: string }) => post<ProjectLink>(`/projects/${projectId}/links`, l),
   deleteLink: (id: number) => del(`/links/${id}`),
+
+  calendars: () => get<Calendar[]>('/calendars'),
+  createCalendar: (c: { name: string; url: string; color?: string }) => post<Calendar>('/calendars', c),
+  updateCalendar: (id: number, c: Partial<Pick<Calendar, 'name' | 'url' | 'color' | 'enabled'>>) => patch<Calendar>(`/calendars/${id}`, c),
+  deleteCalendar: (id: number) => del(`/calendars/${id}`),
+  calendarEvents: (days = 7) => get<{ today: string; events: CalendarEvent[] }>(`/calendar/events${qs({ days })}`),
+  feedInfo: () => get<{ token: string; path: string }>('/calendar/feed-info'),
+  rotateFeedToken: () => post<{ token: string; path: string }>('/calendar/feed-token/rotate'),
 
   summary: () => get<Summary>('/summary'),
   activity: (p: { limit?: number; entity?: string; entity_id?: number } = {}) => get<Activity[]>(`/activity${qs(p)}`),

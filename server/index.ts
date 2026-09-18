@@ -9,6 +9,8 @@ import { tasks } from './routes/tasks.js';
 import { shopping } from './routes/shopping.js';
 import { projects } from './routes/projects.js';
 import { misc } from './routes/misc.js';
+import { mountMcp } from './mcp.js';
+import { calendar, feedHandler } from './routes/calendar.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -19,7 +21,7 @@ app.use(express.json({ limit: '1mb' }));
 // Browser requests carry no key, so the check is only enforced when a key is
 // configured AND the request identifies as an agent or has no Origin header.
 const apiKey = process.env.HOMEBASE_API_KEY;
-app.use('/api', (req, res, next) => {
+app.use(['/api', '/mcp'], (req, res, next) => {
   if (!apiKey) return next();
   const supplied = req.header('x-api-key') || req.header('authorization')?.replace(/^Bearer\s+/i, '');
   const isBrowser = !!req.header('origin') || !!req.header('sec-fetch-mode');
@@ -29,8 +31,10 @@ app.use('/api', (req, res, next) => {
 });
 
 const api = express.Router();
-api.use(household, tasks, shopping, projects, misc);
+api.use(household, tasks, shopping, projects, calendar, misc);
 app.use('/api/v1', api);
+mountMcp(app);
+app.get('/calendar/homebase.ics', feedHandler);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API route. The API lives under /api/v1.' }));
 app.use(errorMiddleware);
 

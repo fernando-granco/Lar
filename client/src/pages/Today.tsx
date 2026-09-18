@@ -11,6 +11,7 @@ import { ShoppingRow } from '@/components/ShoppingRow';
 import { TaskSheet } from '@/components/TaskSheet';
 import { ShoppingItemSheet } from '@/components/ShoppingItemSheet';
 import { ProjectIcon } from '@/components/ProjectIcon';
+import { CalendarCard } from '@/components/CalendarCard';
 import { PROJECT_STATUS } from '@/lib/format';
 import type { Task, ShoppingItem } from '@shared/types';
 
@@ -92,6 +93,8 @@ export function Today() {
           )}
         </Card>
       </div>
+
+      <CalendarCard />
 
       <Card title="Projects in motion" icon={Hammer} action={<Link to="/projects" className="btn btn-ghost btn-sm">All projects <ArrowRight /></Link>}>
         {projQ.data?.length ? (
