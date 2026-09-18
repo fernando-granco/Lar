@@ -1,0 +1,18 @@
+services:
+  homebase:
+    build: .
+    image: homebase:latest
+    container_name: homebase
+    ports:
+      - "3001:3000"
+    volumes:
+      - homebase-data:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TZ=${TZ:-UTC}
+    restart: unless-stopped
+
+volumes:
+  homebase-data:
