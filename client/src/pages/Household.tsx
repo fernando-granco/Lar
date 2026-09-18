@@ -8,6 +8,7 @@ import { Sheet, Confirm } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import type { Member, Group } from '@shared/types';
 import { CalendarsCard } from '@/components/CalendarsCard';
+import { BackupCard } from '@/components/BackupCard';
 
 export function Household() {
   const { data } = useHousehold();
@@ -145,6 +146,7 @@ export function Household() {
       </div>
 
       <CalendarsCard />
+      <BackupCard />
 
       <MemberSheet open={memberSheet !== null} member={memberSheet === 'new' ? null : memberSheet} onClose={() => setMemberSheet(null)} />
       <GroupSheet open={groupSheet !== null} group={groupSheet === 'new' ? null : groupSheet} members={data?.members ?? []} onClose={() => setGroupSheet(null)} />

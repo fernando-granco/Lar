@@ -11,6 +11,7 @@ import { projects } from './routes/projects.js';
 import { misc } from './routes/misc.js';
 import { mountMcp } from './mcp.js';
 import { calendar, feedHandler } from './routes/calendar.js';
+import { backup } from './routes/backup.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -31,7 +32,7 @@ app.use(['/api', '/mcp'], (req, res, next) => {
 });
 
 const api = express.Router();
-api.use(household, tasks, shopping, projects, calendar, misc);
+api.use(household, tasks, shopping, projects, calendar, backup, misc);
 app.use('/api/v1', api);
 mountMcp(app);
 app.get('/calendar/homebase.ics', feedHandler);

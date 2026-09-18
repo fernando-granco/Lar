@@ -52,7 +52,8 @@ Everything the app does is available under `/api/v1`. Send `X-Homebase-Member: <
 | To-dos | `GET /tasks?status=open&member=1&due=today`, `POST /tasks`, `PATCH /tasks/:id`, `POST /tasks/:id/complete`, `POST /tasks/:id/reopen`, `DELETE /tasks/:id` |
 | Shopping | `GET /shopping/lists`, `GET /shopping/items?list=1&status=open`, `POST /shopping/items`, `POST /shopping/items/:id/check`, `POST /shopping/lists/:id/clear-checked` |
 | Projects | `GET /projects`, `GET /projects/:id` (full detail), `POST /projects`, `PATCH /projects/:id`, plus `/projects/:id/milestones`, `/projects/:id/expenses`, `/projects/:id/links` |
-| Other | `GET /summary`, `GET /activity`, `GET /events` (server-sent events), `GET /health` |
+| Calendar | `GET /calendars`, `POST /calendars`, `GET /calendar/events?days=7`, `GET /calendar/feed-info`; public feed at `/calendar/homebase.ics?token=…` |
+| Other | `GET /summary`, `GET /activity`, `GET /events` (server-sent events), `GET /backup`, `POST /restore`, `GET /health` |
 
 Assignment is a list of member and group ids. An empty list means "everyone".
 
@@ -83,10 +84,15 @@ Two directions, no OAuth setup required:
 - **Homebase in your calendar.** The Household page shows a private feed address (`/calendar/homebase.ics?token=…`). Subscribe to it from Google Calendar (Other calendars → From URL) or Apple Calendar (File → New Calendar Subscription) and to-do due dates, milestones, and project target dates appear there. You can pick a feed for one person's items only.
 - **Your calendars in Homebase.** Paste the private iCal link of a Google, iCloud, Outlook, or school calendar and the next days' events show on the Today page. Recurring events are expanded, links are refreshed every ten minutes.
 
+## Backup
+
+The Household page has **Download backup**, which gives you one JSON file with everything, and **Restore from file**, which replaces all data with a backup. The same is available at `GET /api/v1/backup` and `POST /api/v1/restore` for scripts and cron jobs.
+
 ## Roadmap
 
-- Backup and restore from the Household page.
 - Direct Google and Apple account sync (OAuth / CalDAV) once the feed approach is not enough.
+- Drag-and-drop reordering and swipe gestures on phones.
+- Notifications (push or via your agent) for overdue items.
 
 ## Development
 
