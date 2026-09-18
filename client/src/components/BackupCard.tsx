@@ -55,7 +55,7 @@ export function BackupCard() {
               const text = await f.text();
               try {
                 const parsed = JSON.parse(text);
-                if (parsed.app !== 'lar' && parsed.app !== 'homebase') throw new Error();
+                if (parsed.app !== 'lar') throw new Error();
               } catch {
                 toast('That file is not a Lar backup');
                 e.target.value = '';

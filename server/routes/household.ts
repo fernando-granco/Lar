@@ -4,6 +4,7 @@ import { db, getSetting, setSetting } from '../db.js';
 import { handler, parse, idParam, notFound, badRequest, zColor, zIdList } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { listMembers, listGroups, getMember } from '../repo.js';
+import { cfAccessConfigured } from '../auth.js';
 import type { Household } from '../../shared/types.js';
 
 export const household = Router();
@@ -14,6 +15,8 @@ export function loadHousehold(): Household {
       household_name: getSetting('household_name', 'Lar'),
       currency: getSetting('currency', 'USD'),
       week_starts_on: (getSetting('week_starts_on', 'monday') as 'monday' | 'sunday') || 'monday',
+      allow_private_calendar_urls: getSetting('allow_private_calendar_urls', '0') === '1',
+      access_sign_in: cfAccessConfigured,
     },
     members: listMembers(),
     groups: listGroups(),
@@ -30,10 +33,11 @@ household.patch(
         household_name: z.string().trim().min(1).max(60).optional(),
         currency: z.string().trim().length(3).toUpperCase().optional(),
         week_starts_on: z.enum(['monday', 'sunday']).optional(),
+        allow_private_calendar_urls: z.boolean().optional(),
       }),
       req.body,
     );
-    for (const [k, v] of Object.entries(body)) if (v !== undefined) setSetting(k, v);
+    for (const [k, v] of Object.entries(body)) if (v !== undefined) setSetting(k, typeof v === 'boolean' ? (v ? '1' : '0') : v);
     logChange(actorFrom(req), 'updated', 'household', null, 'Updated household settings');
     return loadHousehold().settings;
   }),
@@ -45,6 +49,7 @@ const memberBody = z.object({
   name: z.string().trim().min(1).max(40),
   color: zColor.optional(),
   initials: z.string().trim().max(3).optional(),
+  email: z.string().trim().toLowerCase().email().max(120).nullable().optional(),
 });
 
 const initialsFor = (name: string) =>
@@ -61,8 +66,8 @@ household.post(
     const body = parse(memberBody, req.body);
     const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM members').get() as any).n;
     const result = db
-      .prepare('INSERT INTO members (name, color, initials, sort_order) VALUES (?, ?, ?, ?)')
-      .run(body.name, body.color ?? pickColor(order), body.initials || initialsFor(body.name), order);
+      .prepare('INSERT INTO members (name, color, initials, sort_order, email) VALUES (?, ?, ?, ?, ?)')
+      .run(body.name, body.color ?? pickColor(order), body.initials || initialsFor(body.name), order, body.email || null);
     const member = getMember(Number(result.lastInsertRowid))!;
     logChange(actorFrom(req), 'created', 'household', member.id, `Added ${member.name} to the household`);
     res.status(201);
@@ -77,12 +82,13 @@ household.patch(
     const current = getMember(id);
     if (!current) throw notFound('Member not found');
     const body = parse(memberBody.partial().extend({ archived: z.boolean().optional(), sort_order: z.number().int().optional() }), req.body);
-    db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ? WHERE id = ?').run(
+    db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ?, email = ? WHERE id = ?').run(
       body.name ?? current.name,
       body.color ?? current.color,
       body.initials ?? (body.name ? initialsFor(body.name) : current.initials),
       body.archived === undefined ? (current.archived ? 1 : 0) : body.archived ? 1 : 0,
       body.sort_order ?? current.sort_order,
+      body.email === undefined ? current.email : body.email || null,
       id,
     );
     const member = getMember(id)!;

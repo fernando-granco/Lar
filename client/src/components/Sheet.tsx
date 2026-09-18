@@ -6,7 +6,7 @@ import { IconButton, cx } from './ui';
  * A modal built on the native <dialog>. On phones it slides up as a bottom sheet;
  * on larger screens it is a centered dialog. Closes on Escape and backdrop tap.
  */
-export function Sheet({ open, onClose, title, children, footer, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+export function Sheet({ open, onClose, title, children, footer, wide, dismissable = true }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean; dismissable?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -37,7 +37,7 @@ export function Sheet({ open, onClose, title, children, footer, wide }: { open: 
           <div className="sheet-handle" />
           <div className="sheet-head">
             <h2>{title}</h2>
-            <IconButton icon={X} label="Close" onClick={onClose} />
+            {dismissable && <IconButton icon={X} label="Close" onClick={onClose} />}
           </div>
           <div className="sheet-body">{children}</div>
           {footer && <div className="sheet-foot">{footer}</div>}

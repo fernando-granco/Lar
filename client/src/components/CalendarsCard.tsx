@@ -25,6 +25,7 @@ export function CalendarsCard() {
   const toggle = useInvalidatingMutation((c: Calendar) => api.updateCalendar(c.id, { enabled: !c.enabled }), ['calendars', 'calendar']);
   const remove = useInvalidatingMutation((id: number) => api.deleteCalendar(id), ['calendars', 'calendar']);
   const rotate = useInvalidatingMutation(() => api.rotateFeedToken(), ['calendar']);
+  const allowPrivate = useInvalidatingMutation((v: boolean) => api.updateSettings({ allow_private_calendar_urls: v }), ['household']);
 
   const feedUrl = feedQ.data ? `${window.location.origin}${feedQ.data.path}?token=${feedQ.data.token}${feedMember ? `&member=${feedMember}` : ''}` : '';
   const copy = async () => {
@@ -106,6 +107,10 @@ export function CalendarsCard() {
                 {add.isPending ? 'Checking…' : 'Connect calendar'}
               </Button>
             </form>
+            <label className="row" style={{ marginTop: 12, gap: 10, cursor: 'pointer' }}>
+              <CheckBox on={!!household?.settings.allow_private_calendar_urls} onToggle={() => allowPrivate.mutate(!household?.settings.allow_private_calendar_urls)} label="Allow calendars on my local network" />
+              <span style={{ fontSize: 13 }} className="muted">Allow links to my local network (e.g. a Nextcloud or Radicale at home). Off by default so nobody can point Lar at other devices on the network.</span>
+            </label>
           </div>
         </div>
       </Card>

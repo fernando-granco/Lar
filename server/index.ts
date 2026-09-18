@@ -12,27 +12,34 @@ import { misc } from './routes/misc.js';
 import { mountMcp } from './mcp.js';
 import { calendar, feedHandler } from './routes/calendar.js';
 import { backup } from './routes/backup.js';
+import { auth } from './routes/auth.js';
+import { requireUnlock } from './auth.js';
 
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 
-// Optional API key. When LAR_API_KEY is set, requests from outside the
-// browser app (agents, scripts) must send it as a Bearer token or `X-Api-Key`.
-// Browser requests carry no key, so the check is only enforced when a key is
-// configured AND the request identifies as an agent or has no Origin header.
+// Optional agent key. When LAR_API_KEY is set, every request to /mcp and every
+// /api request that identifies as an agent (X-Lar-Agent) must send the key as
+// a Bearer token or X-Api-Key. It does not protect the browser app: Lar is an
+// open household app, and the key only stops unknown automations on your
+// network from acting as an agent. Keep Lar off the public internet, or put an
+// auth proxy such as Cloudflare Access in front of it.
 const apiKey = process.env.LAR_API_KEY;
 app.use(['/api', '/mcp'], (req, res, next) => {
   if (!apiKey) return next();
+  const isAgent = req.path.startsWith('/mcp') || req.baseUrl.startsWith('/mcp') || !!req.header('x-lar-agent');
+  if (!isAgent) return next();
   const supplied = req.header('x-api-key') || req.header('authorization')?.replace(/^Bearer\s+/i, '');
-  const isBrowser = !!req.header('origin') || !!req.header('sec-fetch-mode');
-  if (isBrowser && !req.header('x-lar-agent')) return next();
   if (supplied === apiKey) return next();
-  res.status(401).json({ error: 'A valid API key is required.' });
+  res.status(401).json({ error: 'A valid agent API key is required (LAR_API_KEY).' });
 });
 
+// People who set a profile password must be unlocked on the device first.
+app.use('/api', requireUnlock);
+
 const api = express.Router();
-api.use(household, tasks, shopping, projects, calendar, backup, misc);
+api.use(auth, household, tasks, shopping, projects, calendar, backup, misc);
 app.use('/api/v1', api);
 mountMcp(app);
 app.get('/calendar/lar.ics', feedHandler);

@@ -40,14 +40,17 @@ export const emptyAssignees = (): Assignees => ({ member_ids: [], group_ids: [] 
 
 // ---------- Members & groups ----------
 
+const MEMBER_COLS = 'id, name, color, initials, sort_order, archived, email, (password_hash IS NOT NULL) AS has_password';
+const mapMember = (r: any): Member => ({ ...r, archived: !!r.archived, has_password: !!r.has_password, email: r.email ?? null });
+
 export function listMembers(includeArchived = false): Member[] {
-  const rows = db.prepare(`SELECT * FROM members ${includeArchived ? '' : 'WHERE archived = 0'} ORDER BY sort_order, id`).all() as any[];
-  return rows.map((r) => ({ ...r, archived: !!r.archived }));
+  const rows = db.prepare(`SELECT ${MEMBER_COLS} FROM members ${includeArchived ? '' : 'WHERE archived = 0'} ORDER BY sort_order, id`).all() as any[];
+  return rows.map(mapMember);
 }
 
 export function getMember(id: number): Member | undefined {
-  const r = db.prepare('SELECT * FROM members WHERE id = ?').get(id) as any;
-  return r ? { ...r, archived: !!r.archived } : undefined;
+  const r = db.prepare(`SELECT ${MEMBER_COLS} FROM members WHERE id = ?`).get(id);
+  return r ? mapMember(r) : undefined;
 }
 
 export function listGroups(): Group[] {

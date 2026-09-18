@@ -29,7 +29,7 @@ misc.get(
     name: 'Lar API',
     version: 1,
     docs: 'https://github.com/fernando-granco/Lar#api',
-    identify: 'Send X-Lar-Member: <id> to act as a person or X-Lar-Agent: <name> to act as an agent.',
+    identify: 'Send X-Lar-Member: <id> to act as a person (plus X-Lar-Unlock: <token> from POST /auth/unlock if they set a password) or X-Lar-Agent: <name> to act as an agent (plus the LAR_API_KEY when configured).',
     mcp: '/mcp (Model Context Protocol, Streamable HTTP, stateless)',
     routes: {
       household: ['GET /household', 'PATCH /household/settings', 'POST /members', 'PATCH /members/:id', 'DELETE /members/:id', 'POST /groups', 'PATCH /groups/:id', 'DELETE /groups/:id'],

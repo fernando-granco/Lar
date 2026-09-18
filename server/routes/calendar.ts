@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import ical, { type VEvent, type CalendarResponse } from 'node-ical';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { db, getSetting, nowIso } from '../db.js';
 import { handler, parse, idParam, notFound, badRequest, zColor, zDate } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
@@ -182,16 +184,48 @@ calendar.delete(
 const cache = new Map<string, { at: number; data: CalendarResponse }>();
 const TTL = 10 * 60 * 1000;
 
+/** True for loopback, private, link-local, and other non-public addresses. */
+function isPrivateAddress(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number) as [number, number];
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  const v6 = ip.toLowerCase();
+  if (v6 === '::1' || v6 === '::' || v6.startsWith('fe80:') || v6.startsWith('fc') || v6.startsWith('fd')) return true;
+  const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  return mapped ? isPrivateAddress(mapped[1]!) : false;
+}
+
+/** Unless the household allowed it, refuse calendar links that point inside the network the server sits on. */
+async function assertPublicHost(url: string) {
+  if (getSetting('allow_private_calendar_urls', '0') === '1') return;
+  const host = new URL(url).hostname.replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) throw new Error('links to your local network are not allowed (enable them in Household settings)');
+  const addrs = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true })).map((a) => a.address);
+  if (!addrs.length || addrs.some(isPrivateAddress)) throw new Error('links to your local network are not allowed (enable them in Household settings)');
+}
+
 async function fetchCalendar(url: string) {
   const hit = cache.get(url);
   if (hit && Date.now() - hit.at < TTL) return hit.data;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
-  let text: string;
+  let text = '';
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Lar/0.2 (+https://github.com/fernando-granco/Lar)' }, signal: controller.signal, redirect: 'follow' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    text = await res.text();
+    // Follow redirects by hand so every hop is checked against the private-network rule.
+    let current = url;
+    for (let hop = 0; hop < 5; hop++) {
+      await assertPublicHost(current);
+      const res = await fetch(current, { headers: { 'User-Agent': 'Lar/0.2 (+https://github.com/fernando-granco/Lar)' }, signal: controller.signal, redirect: 'manual' });
+      if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+        current = new URL(res.headers.get('location')!, current).toString();
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      text = await res.text();
+      break;
+    }
+    if (!text) throw new Error('too many redirects');
   } finally {
     clearTimeout(timer);
   }

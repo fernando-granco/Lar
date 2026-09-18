@@ -4,8 +4,9 @@ import { publish } from './events.js';
 import type { ChangeEvent } from '../shared/types.js';
 
 /**
- * Lar has no logins. The browser sends the chosen household member in
- * `X-Lar-Member`; agents identify themselves with `X-Lar-Agent`.
+ * Lar has no accounts. The browser sends the chosen household member in
+ * `X-Lar-Member` (plus `X-Lar-Unlock` when that person set a password, see
+ * auth.ts); agents identify themselves with `X-Lar-Agent`.
  */
 export interface Actor {
   type: 'member' | 'agent' | 'system';

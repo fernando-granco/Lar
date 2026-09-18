@@ -24,6 +24,7 @@ const TABLES = [
   'activity',
   'shopping_history',
   'calendars',
+  'unlocks',
 ] as const;
 
 export function exportAll() {
@@ -45,7 +46,7 @@ backup.post(
   json({ limit: '50mb' }),
   handler((req) => {
     const data = req.body as { app?: string; version?: number; tables?: Record<string, unknown[]> };
-    if (!data || !['lar', 'homebase'].includes(data.app ?? '') || !data.tables) throw badRequest('That file is not a Lar backup.');
+    if (!data || data.app !== 'lar' || !data.tables) throw badRequest('That file is not a Lar backup.');
     if (data.version !== 1) throw badRequest(`Unsupported backup version ${data.version}.`);
     const counts: Record<string, number> = {};
     db.transaction(() => {

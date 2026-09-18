@@ -1,4 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { api } from '@/lib/api';
+import { usePrefs, setPrefs } from '@/lib/store';
 import { useHousehold, useLiveUpdates } from '@/lib/hooks';
 import { Layout } from './components/Layout';
 import { Today } from './pages/Today';
@@ -13,6 +16,22 @@ import { Welcome } from './pages/Welcome';
 export function App() {
   useLiveUpdates();
   const { data, isLoading, error } = useHousehold();
+  const { memberId } = usePrefs();
+  const triedAccess = useRef(false);
+
+  // Behind Cloudflare Access the server knows who signed in; use it to pick (and unlock) the person.
+  useEffect(() => {
+    if (!data?.settings.access_sign_in || memberId || triedAccess.current) return;
+    triedAccess.current = true;
+    api.accessSignIn().then((r) => {
+      if (r.member) setPrefs({ memberId: r.member.id, unlockToken: r.token });
+    }).catch(() => {});
+  }, [data, memberId]);
+
+  // A remembered person who no longer exists must be picked again.
+  useEffect(() => {
+    if (data && memberId && !data.members.some((m) => m.id === memberId)) setPrefs({ memberId: null, unlockToken: null });
+  }, [data, memberId]);
 
   if (isLoading) return null;
   if (error || !data)

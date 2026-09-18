@@ -44,7 +44,7 @@ export function Welcome() {
       </p>
       <form className="form" onSubmit={submit}>
         <Field label="Household name" hint="optional">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. The Granco home" maxLength={60} />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. The Silva home" maxLength={60} />
         </Field>
         <Field label="Who lives here?">
           <div className="stack">

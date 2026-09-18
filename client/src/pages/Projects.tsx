@@ -9,7 +9,7 @@ import { friendlyDate, money, PROJECT_STATUS, daysUntil } from '@/lib/format';
 import { Button, Empty, Chip, Progress, Badge, Segmented, AvatarStack } from '@/components/ui';
 import { ProjectSheet } from '@/components/ProjectSheet';
 import { ProjectIcon } from '@/components/ProjectIcon';
-import type { Project } from '@shared/types';
+import type { Project, Member } from '@shared/types';
 
 const FILTERS: { key: string; label: string }[] = [
   { key: 'open', label: 'All open' },
@@ -69,7 +69,7 @@ export function Projects() {
   );
 }
 
-export function ProjectCard({ project: p, currency, members }: { project: Project; currency: string; members: { id: number; name: string; color: string; initials: string; sort_order: number; archived: boolean }[] }) {
+export function ProjectCard({ project: p, currency, members }: { project: Project; currency: string; members: Member[] }) {
   const pct = p.task_count ? Math.round((p.task_done_count / p.task_count) * 100) : p.milestone_count ? Math.round((p.milestone_done_count / p.milestone_count) * 100) : 0;
   const st = PROJECT_STATUS[p.status]!;
   const over = p.budget !== null && p.spent > p.budget;

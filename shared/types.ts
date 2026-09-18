@@ -19,6 +19,9 @@ export interface Member {
   initials: string;
   sort_order: number;
   archived: boolean;
+  email: string | null;
+  /** True when this person set a profile password. Devices must unlock them once. */
+  has_password: boolean;
 }
 
 export interface Group {
@@ -33,6 +36,10 @@ export interface Settings {
   household_name: string;
   currency: string;
   week_starts_on: 'monday' | 'sunday';
+  /** Let the server fetch calendars on private network addresses (e.g. a local Nextcloud). */
+  allow_private_calendar_urls: boolean;
+  /** True when Cloudflare Access sign-in is configured on the server. */
+  access_sign_in: boolean;
 }
 
 export interface Household {

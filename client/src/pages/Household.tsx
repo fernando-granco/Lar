@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor, Lock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useHousehold, useInvalidatingMutation } from '@/lib/hooks';
 import { usePrefs, setPrefs, applyTheme } from '@/lib/store';
@@ -52,7 +52,10 @@ export function Household() {
                 <Avatar member={m} size="lg" />
                 <div className="body">
                   <div className="title">{m.name}</div>
-                  <div className="meta">{m.id === prefs.memberId ? 'This device' : data.groups.filter((g) => g.member_ids.includes(m.id)).map((g) => g.name).join(', ')}</div>
+                  <div className="meta">
+                    {m.has_password && <Lock size={12} aria-label="Password protected" />}
+                    {m.id === prefs.memberId ? 'This device' : data.groups.filter((g) => g.member_ids.includes(m.id)).map((g) => g.name).join(', ')}
+                  </div>
                 </div>
                 <div className="side">
                   <IconButton icon={Pencil} label="Edit" onClick={(e) => { e.stopPropagation(); setMemberSheet(m); }} />
@@ -172,16 +175,45 @@ export function Household() {
 function MemberSheet({ open, member, onClose }: { open: boolean; member: Member | null; onClose: () => void }) {
   const toast = useToast();
   const { data } = useHousehold();
+  const prefs = usePrefs();
   const [name, setName] = useState('');
   const [color, setColor] = useState(PALETTE[0]!);
   const [initials, setInitials] = useState('');
+  const [email, setEmail] = useState('');
+  const [pwMode, setPwMode] = useState<'closed' | 'set' | 'change' | 'remove'>('closed');
+  const [current, setCurrent] = useState('');
+  const [pw, setPw] = useState('');
+  const [pwError, setPwError] = useState('');
   useEffect(() => {
     if (!open) return;
     setName(member?.name ?? '');
     setColor(member?.color ?? PALETTE[(data?.members.length ?? 0) % PALETTE.length]!);
     setInitials(member?.initials ?? '');
+    setEmail(member?.email ?? '');
+    setPwMode('closed');
+    setCurrent('');
+    setPw('');
+    setPwError('');
   }, [open, member, data?.members.length]);
-  const save = useInvalidatingMutation(() => (member ? api.updateMember(member.id, { name: name.trim(), color, initials: initials.trim() || undefined }) : api.createMember({ name: name.trim(), color, initials: initials.trim() || undefined })), ['household']);
+  const save = useInvalidatingMutation(
+    () =>
+      member
+        ? api.updateMember(member.id, { name: name.trim(), color, initials: initials.trim() || undefined, email: email.trim() || null })
+        : api.createMember({ name: name.trim(), color, initials: initials.trim() || undefined, email: email.trim() || undefined }),
+    ['household'],
+  );
+  const password = useInvalidatingMutation(async () => {
+    if (!member) return;
+    if (pwMode === 'remove') {
+      await api.removePassword(member.id, current);
+      if (prefs.memberId === member.id) setPrefs({ unlockToken: null });
+      return;
+    }
+    const r = await api.setPassword(member.id, pw, pwMode === 'change' ? current : undefined);
+    if (prefs.memberId === member.id) setPrefs({ unlockToken: r.token });
+  }, ['household']);
+  const isMe = member?.id === prefs.memberId;
+
   return (
     <Sheet open={open} onClose={onClose} title={member ? 'Edit person' : 'Add a person'} footer={<Button variant="primary" className="right" disabled={!name.trim() || save.isPending} onClick={async () => { await save.mutateAsync(undefined as never); toast(member ? 'Saved' : `${name.trim()} added`); onClose(); }}>{member ? 'Save' : 'Add'}</Button>}>
       <div className="form">
@@ -194,9 +226,72 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
         <Field label="Color">
           <ColorDots value={color} onChange={setColor} />
         </Field>
-        <Field label="Initials" hint="optional">
-          <Input value={initials} onChange={(e) => setInitials(e.target.value.toUpperCase().slice(0, 3))} maxLength={3} placeholder="Auto" style={{ width: 100 }} />
-        </Field>
+        <div className="form-grid">
+          <Field label="Initials" hint="optional">
+            <Input value={initials} onChange={(e) => setInitials(e.target.value.toUpperCase().slice(0, 3))} maxLength={3} placeholder="Auto" />
+          </Field>
+          <Field label="Email" hint={data?.settings.access_sign_in ? 'for automatic sign-in' : 'optional'}>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={120} placeholder="name@example.com" autoComplete="off" />
+          </Field>
+        </div>
+
+        {member && (
+          <div className="stack" style={{ gap: 8, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+            <div className="row">
+              <Lock size={16} className="faint" />
+              <b style={{ fontSize: 14 }} className="grow">{member.has_password ? 'Password protected' : 'No password'}</b>
+              {pwMode === 'closed' && (
+                member.has_password ? (
+                  <div className="row" style={{ gap: 4 }}>
+                    <Button size="sm" onClick={() => setPwMode('change')}>Change</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPwMode('remove')}>Remove</Button>
+                  </div>
+                ) : (
+                  <Button size="sm" onClick={() => setPwMode('set')}>Add password</Button>
+                )
+              )}
+            </div>
+            <p className="faint" style={{ fontSize: 12.5 }}>
+              {member.has_password
+                ? 'Devices must enter the password once before acting as this person. Forgot it? On the server run: docker exec lar node dist/server/cli.js reset-password ' + member.name
+                : 'Optional. Without one, anyone in the house can pick this person.'}
+            </p>
+            {pwMode !== 'closed' && (
+              <form
+                className="form"
+                style={{ gap: 10 }}
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setPwError('');
+                  try {
+                    await password.mutateAsync(undefined as never);
+                    toast(pwMode === 'remove' ? 'Password removed' : 'Password saved');
+                    setPwMode('closed');
+                    setCurrent('');
+                    setPw('');
+                  } catch (err) {
+                    setPwError((err as Error).message);
+                  }
+                }}
+              >
+                {(pwMode === 'change' || pwMode === 'remove') && (
+                  <Field label="Current password"><Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus /></Field>
+                )}
+                {pwMode !== 'remove' && (
+                  <Field label={pwMode === 'change' ? 'New password' : 'Password'} hint="at least 4 characters"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" autoFocus={pwMode === 'set'} /></Field>
+                )}
+                {pwError && <p className="error">{pwError}</p>}
+                <div className="row">
+                  <Button variant="ghost" size="sm" onClick={() => setPwMode('closed')}>Cancel</Button>
+                  <Button variant={pwMode === 'remove' ? 'danger' : 'primary'} size="sm" type="submit" className="right" disabled={password.isPending || (pwMode !== 'remove' && pw.length < 4) || ((pwMode === 'change' || pwMode === 'remove') && !current)}>
+                    {pwMode === 'remove' ? 'Remove password' : 'Save password'}
+                  </Button>
+                </div>
+              </form>
+            )}
+            {!isMe && !member.has_password && <p className="faint" style={{ fontSize: 12 }}>Tip: pick yourself in the sidebar first if this password is for you.</p>}
+          </div>
+        )}
       </div>
     </Sheet>
   );

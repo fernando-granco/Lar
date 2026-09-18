@@ -2,7 +2,7 @@ import type {
   Household, Member, Group, Settings, Task, ShoppingList, ShoppingItem, Project, ProjectDetail,
   Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent, Agenda,
 } from '@shared/types';
-import { getCurrentMemberId } from './store';
+import { getCurrentMemberId, getUnlockToken, clearMember } from './store';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public details?: unknown) {
@@ -15,9 +15,12 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const member = getCurrentMemberId();
   if (member) headers['X-Lar-Member'] = String(member);
+  const unlock = getUnlockToken();
+  if (unlock) headers['X-Lar-Unlock'] = unlock;
   const res = await fetch(`/api/v1${url}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && data.code === 'locked') clearMember(); // the picker will ask again
   if (!res.ok) throw new ApiError(res.status, data.error || res.statusText, data.details);
   return data as T;
 }
@@ -51,8 +54,12 @@ export type ExpenseInput = Partial<{ title: string; amount: number; date: string
 export const api = {
   household: () => get<Household>('/household'),
   updateSettings: (s: Partial<Settings>) => patch<Settings>('/household/settings', s),
-  createMember: (m: { name: string; color?: string; initials?: string }) => post<Member>('/members', m),
-  updateMember: (id: number, m: Partial<Member>) => patch<Member>(`/members/${id}`, m),
+  createMember: (m: { name: string; color?: string; initials?: string; email?: string }) => post<Member>('/members', m),
+  updateMember: (id: number, m: Partial<Pick<Member, 'name' | 'color' | 'initials' | 'email' | 'archived' | 'sort_order'>>) => patch<Member>(`/members/${id}`, m),
+  unlock: (member_id: number, password: string) => post<{ token: string | null; member: Member }>('/auth/unlock', { member_id, password }),
+  accessSignIn: () => post<{ configured: boolean; member: Member | null; token: string | null; email?: string }>('/auth/access'),
+  setPassword: (id: number, password: string, current?: string) => post<{ token: string; member: Member }>(`/members/${id}/password`, { password, current }),
+  removePassword: (id: number, current: string) => request<void>('DELETE', `/members/${id}/password`, { current }),
   deleteMember: (id: number) => del(`/members/${id}`),
   createGroup: (g: { name: string; color?: string; member_ids?: number[] }) => post<Group>('/groups', g),
   updateGroup: (id: number, g: Partial<Pick<Group, 'name' | 'color' | 'member_ids'>>) => patch<Group>(`/groups/${id}`, g),

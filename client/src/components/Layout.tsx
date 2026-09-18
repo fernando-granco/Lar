@@ -89,7 +89,7 @@ export function Layout({ children }: { children: ReactNode }) {
         ))}
       </nav>
 
-      <MemberPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
+      <MemberPicker open={pickerOpen || !me} required={!me} onClose={() => setPickerOpen(false)} />
     </div>
   );
 }

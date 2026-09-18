@@ -29,9 +29,13 @@ Your data lives in the `lar-data` Docker volume as a single SQLite file.
 
 **Update** with `git pull && docker compose up -d --build`. Database migrations run automatically on start.
 
-### Keep it on your LAN
+### Who is who, and the security model
 
-Lar has no authentication by design. If you ever expose it beyond your home network, put it behind a reverse proxy with HTTPS and an auth layer (Caddy, Authelia, Tailscale, or similar) and set `LAR_API_KEY` for the API.
+Lar has no accounts. Each device picks a person from the household, and that choice is remembered. Anyone who can reach Lar can read and change everything, which is the point for a family on a home network.
+
+- **Optional profile password.** Any person can add a password to their profile on the Household page. From then on a device must enter it once before acting as that person. Everything else stays open. Forgot it? On the server: `docker exec lar node dist/server/cli.js reset-password NAME`.
+- **Keep it on your LAN.** To use Lar away from home, put it behind HTTPS and an auth layer (Cloudflare Access, Authelia, Tailscale, or similar). See the Cloudflare Access section below: with a little configuration it also signs people in automatically.
+- **Agents.** Set `LAR_API_KEY` so only automations that know the key can act as an agent (see Agents below). It does not protect the browser app.
 
 ## Configuration
 
@@ -40,11 +44,13 @@ Lar has no authentication by design. If you ever expose it beyond your home netw
 | `PORT` | `3000` | Port inside the container. Compose maps it to `3001` on the host. |
 | `DATA_DIR` | `/app/data` | Where the SQLite database is stored. |
 | `TZ` | `UTC` | Timezone used for "today" and due dates. |
-| `LAR_API_KEY` | unset | When set, agents and scripts must send it as a Bearer token or `X-Api-Key` header. Browser use on the LAN is unaffected. |
+| `LAR_API_KEY` | unset | When set, every MCP request and every API request that identifies as an agent must send it as a Bearer token or `X-Api-Key` header. The browser app is unaffected. |
+| `LAR_CF_ACCESS_TEAM` | unset | Your Cloudflare Access team name (the part before `.cloudflareaccess.com`). With `LAR_CF_ACCESS_AUD`, people coming through Access are signed in automatically by the email on their profile. |
+| `LAR_CF_ACCESS_AUD` | unset | The Access application's Audience (AUD) tag. |
 
 ## API
 
-Everything the app does is available under `/api/v1`. Send `X-Lar-Member: <id>` to act as a person, or `X-Lar-Agent: <name>` to act as an agent, so the activity log stays meaningful.
+Everything the app does is available under `/api/v1`. Send `X-Lar-Member: <id>` to act as a person, or `X-Lar-Agent: <name>` to act as an agent, so the activity log stays meaningful. Acting as a person who set a password needs an `X-Lar-Unlock` token from `POST /auth/unlock`.
 
 | Area | Endpoints |
 | --- | --- |
@@ -82,7 +88,7 @@ Hermes Agent or any other MCP-aware agent: add an HTTP MCP server with the same 
 Two directions, no OAuth setup required:
 
 - **Lar in your calendar.** The Household page shows a private feed address (`/calendar/lar.ics?token=…`). Subscribe to it from Google Calendar (Other calendars → From URL) or Apple Calendar (File → New Calendar Subscription) and to-do due dates, milestones, and project target dates appear there. You can pick a feed for one person's items only.
-- **Your calendars in Lar.** Paste the private iCal link of a Google, iCloud, Outlook, or school calendar and the next days' events show on the Today page. Recurring events are expanded, links are refreshed every ten minutes.
+- **Your calendars in Lar.** Paste the private iCal link of a Google, iCloud, Outlook, or school calendar and the next days' events show on the Today page. Recurring events are expanded, links are refreshed every ten minutes. Links to addresses on your own network are refused unless you allow them on the Household page, so nobody can point Lar at other devices in the house.
 
 ## Behind Cloudflare Access (or any auth proxy)
 
@@ -91,7 +97,9 @@ Lar works behind Cloudflare Access, Authelia, or a similar login layer with two 
 - **Calendar feed.** Google and Apple fetch `/calendar/lar.ics` without a browser session, so a login page breaks the subscription. Add an Access application for the path `your-domain/calendar/*` with a **Bypass** policy. The feed stays protected by its own token.
 - **Agents and scripts.** Requests to `/mcp` and `/api/v1` must pass Access. Either give the agent a Cloudflare **Service Token** and send the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers, or let an agent on your home network use the LAN address directly and skip the tunnel. Set `LAR_API_KEY` as well if the API is reachable from outside.
 
-The browser app, live updates, and the iCal links you import all work unchanged. Access identifies who logged in, so a future version can pick the household member from that automatically.
+The browser app, live updates, and the iCal links you import all work unchanged.
+
+**Automatic sign-in.** Set `LAR_CF_ACCESS_TEAM` and `LAR_CF_ACCESS_AUD` (both shown in the Access application's settings) and put each person's email on their profile. Lar verifies the signed identity Cloudflare attaches to every request and picks that person on the device, unlocking their profile if it has a password. On the home network, where Access is not involved, the usual picker appears.
 
 ## Backup
 
