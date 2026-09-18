@@ -65,7 +65,7 @@ export function requireUnlock(req: Request, res: Response, next: NextFunction) {
 
 // ---------- Cloudflare Access ----------
 
-const team = process.env.LAR_CF_ACCESS_TEAM; // e.g. "granco-home" for granco-home.cloudflareaccess.com
+const team = process.env.LAR_CF_ACCESS_TEAM; // e.g. "myfamily" for myfamily.cloudflareaccess.com
 const audience = process.env.LAR_CF_ACCESS_AUD; // the application's Audience (AUD) tag
 export const cfAccessConfigured = !!(team && audience);
 
