@@ -11,10 +11,12 @@ export const dataDir = process.env.DATA_DIR || path.join(projectRoot, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
 // Installs from before the rename keep their data: move homebase.db to lar.db once.
-for (const suffix of ['', '-wal', '-shm']) {
-  const old = path.join(dataDir, `homebase.db${suffix}`);
-  const next = path.join(dataDir, `lar.db${suffix}`);
-  if (fs.existsSync(old) && !fs.existsSync(path.join(dataDir, 'lar.db'))) fs.renameSync(old, next);
+if (fs.existsSync(path.join(dataDir, 'homebase.db')) && !fs.existsSync(path.join(dataDir, 'lar.db'))) {
+  // The -wal and -shm files must move together with the main file or the newest writes are lost.
+  for (const suffix of ['', '-wal', '-shm']) {
+    const old = path.join(dataDir, `homebase.db${suffix}`);
+    if (fs.existsSync(old)) fs.renameSync(old, path.join(dataDir, `lar.db${suffix}`));
+  }
 }
 export const db = new Database(path.join(dataDir, 'lar.db'));
 db.pragma('journal_mode = WAL');
