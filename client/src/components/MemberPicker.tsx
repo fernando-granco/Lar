@@ -11,7 +11,7 @@ export function MemberPicker({ open, onClose }: { open: boolean; onClose: () => 
   return (
     <Sheet open={open} onClose={onClose} title="Who's this?">
       <p className="muted" style={{ marginBottom: 14 }}>
-        Homebase remembers your choice on this device so lists can show what's yours.
+        Lar remembers your choice on this device so lists can show what's yours.
       </p>
       <div className="member-list">
         {data?.members.map((m) => (

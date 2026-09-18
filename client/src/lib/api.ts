@@ -14,7 +14,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const member = getCurrentMemberId();
-  if (member) headers['X-Homebase-Member'] = String(member);
+  if (member) headers['X-Lar-Member'] = String(member);
   const res = await fetch(`/api/v1${url}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));

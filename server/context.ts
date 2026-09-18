@@ -4,8 +4,8 @@ import { publish } from './events.js';
 import type { ChangeEvent } from '../shared/types.js';
 
 /**
- * Homebase has no logins. The browser sends the chosen household member in
- * `X-Homebase-Member`; agents identify themselves with `X-Homebase-Agent`.
+ * Lar has no logins. The browser sends the chosen household member in
+ * `X-Lar-Member`; agents identify themselves with `X-Lar-Agent`.
  */
 export interface Actor {
   type: 'member' | 'agent' | 'system';
@@ -14,9 +14,9 @@ export interface Actor {
 }
 
 export function actorFrom(req: Request): Actor {
-  const agent = req.header('x-homebase-agent');
+  const agent = req.header('x-lar-agent');
   if (agent) return { type: 'agent', id: null, name: agent.slice(0, 60) };
-  const memberId = Number(req.header('x-homebase-member'));
+  const memberId = Number(req.header('x-lar-member'));
   if (memberId > 0) {
     const row = db.prepare('SELECT id, name FROM members WHERE id = ?').get(memberId) as { id: number; name: string } | undefined;
     if (row) return { type: 'member', id: row.id, name: row.name };

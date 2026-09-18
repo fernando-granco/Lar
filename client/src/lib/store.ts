@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 /**
  * Tiny per-device preferences store backed by localStorage.
- * Homebase has no logins: "who am I" is just a remembered choice on this device.
+ * Lar has no logins: "who am I" is just a remembered choice on this device.
  */
 type Prefs = {
   memberId: number | null;
@@ -10,12 +10,12 @@ type Prefs = {
   view: 'mine' | 'everyone';
 };
 
-const KEY = 'homebase.prefs';
+const KEY = 'lar.prefs';
 const listeners = new Set<() => void>();
 
 function read(): Prefs {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem('homebase.prefs');
     if (raw) return { memberId: null, theme: 'system', view: 'everyone', ...JSON.parse(raw) };
   } catch {
     /* ignore */

@@ -1,16 +1,16 @@
 {
-  "name": "homebase",
+  "name": "lar",
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "A self-hosted household hub: to-dos, shopping lists, and home projects for your family.",
+  "description": "Lar. The family's home hub: self-hosted to-dos, shopping lists, and home projects.",
   "license": "MIT",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "cross-env HOMEBASE_PORT=3000 tsx watch server/index.ts",
+    "dev:server": "cross-env LAR_PORT=3000 tsx watch server/index.ts",
     "dev:client": "vite",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",

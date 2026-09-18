@@ -35,7 +35,7 @@ export function BackupCard() {
     <>
       <Card title="Backup" icon={DatabaseBackup}>
         <p className="muted" style={{ fontSize: 13.5, marginBottom: 12 }}>
-          Everything in Homebase fits in one file. Download it now and then, and keep it somewhere safe. Restoring replaces all current data.
+          Everything in Lar fits in one file. Download it now and then, and keep it somewhere safe. Restoring replaces all current data.
         </p>
         <div className="row wrap">
           <a className="btn btn-secondary" href="/api/v1/backup" download>
@@ -55,9 +55,9 @@ export function BackupCard() {
               const text = await f.text();
               try {
                 const parsed = JSON.parse(text);
-                if (parsed.app !== 'homebase') throw new Error();
+                if (parsed.app !== 'lar' && parsed.app !== 'homebase') throw new Error();
               } catch {
-                toast('That file is not a Homebase backup');
+                toast('That file is not a Lar backup');
                 e.target.value = '';
                 return;
               }

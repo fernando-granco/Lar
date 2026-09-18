@@ -1,7 +1,7 @@
 {
-  "name": "Homebase",
-  "short_name": "Homebase",
-  "description": "A shared hub for your household's to-dos, shopping, and home projects.",
+  "name": "Lar",
+  "short_name": "Lar",
+  "description": "The family's home hub: shared to-dos, shopping lists, and home projects.",
   "start_url": "/today",
   "display": "standalone",
   "background_color": "#f8f7f3",

@@ -29,13 +29,13 @@ const TABLES = [
 export function exportAll() {
   const tables: Record<string, unknown[]> = {};
   for (const t of TABLES) tables[t] = db.prepare(`SELECT * FROM ${t}`).all();
-  return { app: 'homebase', version: 1, exported_at: new Date().toISOString(), tables };
+  return { app: 'lar', version: 1, exported_at: new Date().toISOString(), tables };
 }
 
 backup.get(
   '/backup',
   handler((_req, res) => {
-    res.setHeader('Content-Disposition', `attachment; filename="homebase-backup-${todayIso()}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="lar-backup-${todayIso()}.json"`);
     return exportAll();
   }),
 );
@@ -45,7 +45,7 @@ backup.post(
   json({ limit: '50mb' }),
   handler((req) => {
     const data = req.body as { app?: string; version?: number; tables?: Record<string, unknown[]> };
-    if (!data || data.app !== 'homebase' || !data.tables) throw badRequest('That file is not a Homebase backup.');
+    if (!data || !['lar', 'homebase'].includes(data.app ?? '') || !data.tables) throw badRequest('That file is not a Lar backup.');
     if (data.version !== 1) throw badRequest(`Unsupported backup version ${data.version}.`);
     const counts: Record<string, number> = {};
     db.transaction(() => {
@@ -70,7 +70,7 @@ backup.post(
         db.pragma('foreign_keys = ON');
       }
     })();
-    logChange(actorFrom(req), 'updated', 'household', null, 'Restored Homebase from a backup');
+    logChange(actorFrom(req), 'updated', 'household', null, 'Restored Lar from a backup');
     return { restored: counts };
   }),
 );

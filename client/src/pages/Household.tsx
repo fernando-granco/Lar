@@ -24,7 +24,7 @@ export function Household() {
       setWeek(data.settings.week_starts_on);
     }
   }, [data]);
-  const saveSettings = useInvalidatingMutation(() => api.updateSettings({ household_name: name.trim() || 'Homebase', currency: currency.trim().toUpperCase() || 'USD', week_starts_on: week }), ['household']);
+  const saveSettings = useInvalidatingMutation(() => api.updateSettings({ household_name: name.trim() || 'Lar', currency: currency.trim().toUpperCase() || 'USD', week_starts_on: week }), ['household']);
 
   const [memberSheet, setMemberSheet] = useState<Member | 'new' | null>(null);
   const [groupSheet, setGroupSheet] = useState<Group | 'new' | null>(null);
@@ -40,7 +40,7 @@ export function Household() {
       <header className="page-head">
         <div>
           <h1>Household</h1>
-          <p className="sub">The people, groups, and settings behind your Homebase.</p>
+          <p className="sub">The people, groups, and settings behind your Lar.</p>
         </div>
       </header>
 
@@ -123,12 +123,12 @@ export function Household() {
         <Card title="Agents & API" icon={Plug}>
           <div className="stack" style={{ gap: 14 }}>
             <div>
-              <b style={{ fontSize: 14 }}>Let an agent use Homebase</b>
+              <b style={{ fontSize: 14 }}>Let an agent use Lar</b>
               <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
-                Homebase is an MCP server. Add this address to Hermes Agent, Claude, or any Model Context Protocol client and it can read and change to-dos, shopping, and projects by name.
+                Lar is an MCP server. Add this address to Hermes Agent, Claude, or any Model Context Protocol client and it can read and change to-dos, shopping, and projects by name.
               </p>
               <code className="mono" style={{ display: 'block', marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 8, wordBreak: 'break-all' }}>{origin}/mcp</code>
-              <p className="faint" style={{ fontSize: 12.5, marginTop: 6 }}>Send an <code className="mono">X-Homebase-Agent</code> header with the agent's name so the activity log shows who did what.</p>
+              <p className="faint" style={{ fontSize: 12.5, marginTop: 6 }}>Send an <code className="mono">X-Lar-Agent</code> header with the agent's name so the activity log shows who did what.</p>
             </div>
             <div>
               <b style={{ fontSize: 14 }}>REST API for scripts</b>
@@ -138,7 +138,7 @@ export function Household() {
             <div>
               <b style={{ fontSize: 14 }}>Install on your phone</b>
               <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
-                Open this address in Safari or Chrome on your phone and choose “Add to Home Screen”. Homebase then opens like an app.
+                Open this address in Safari or Chrome on your phone and choose “Add to Home Screen”. Lar then opens like an app.
               </p>
             </div>
           </div>

@@ -26,10 +26,10 @@ misc.get('/summary', handler(() => summary()));
 misc.get(
   '/',
   handler(() => ({
-    name: 'Homebase API',
+    name: 'Lar API',
     version: 1,
-    docs: 'https://github.com/fernando-granco/Homebase#api',
-    identify: 'Send X-Homebase-Member: <id> to act as a person or X-Homebase-Agent: <name> to act as an agent.',
+    docs: 'https://github.com/fernando-granco/Lar#api',
+    identify: 'Send X-Lar-Member: <id> to act as a person or X-Lar-Agent: <name> to act as an agent.',
     mcp: '/mcp (Model Context Protocol, Streamable HTTP, stateless)',
     routes: {
       household: ['GET /household', 'PATCH /household/settings', 'POST /members', 'PATCH /members/:id', 'DELETE /members/:id', 'POST /groups', 'PATCH /groups/:id', 'DELETE /groups/:id'],

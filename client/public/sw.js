@@ -1,6 +1,6 @@
-/* Homebase service worker: makes the app installable and keeps the shell loading
+/* Lar service worker: makes the app installable and keeps the shell loading
    when the network is slow. Data always comes from the server. */
-const VERSION = 'homebase-v1';
+const VERSION = 'lar-v1';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {

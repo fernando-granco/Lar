@@ -11,7 +11,7 @@ export const household = Router();
 export function loadHousehold(): Household {
   return {
     settings: {
-      household_name: getSetting('household_name', 'Homebase'),
+      household_name: getSetting('household_name', 'Lar'),
       currency: getSetting('currency', 'USD'),
       week_starts_on: (getSetting('week_starts_on', 'monday') as 'monday' | 'sunday') || 'monday',
     },

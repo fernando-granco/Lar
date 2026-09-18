@@ -42,7 +42,7 @@ export function CalendarsCard() {
       <Card title="Calendars" icon={CalendarDays}>
         <div className="stack" style={{ gap: 18 }}>
           <div>
-            <b style={{ fontSize: 14 }}>Show Homebase in Google or Apple Calendar</b>
+            <b style={{ fontSize: 14 }}>Show Lar in Google or Apple Calendar</b>
             <p className="muted" style={{ fontSize: 13.5, margin: '4px 0 8px' }}>
               Subscribe to this address and due dates, milestones, and project targets appear in your calendar. Google: Other calendars → From URL. Apple: File → New Calendar Subscription.
             </p>
@@ -62,7 +62,7 @@ export function CalendarsCard() {
           </div>
 
           <div>
-            <b style={{ fontSize: 14 }}>Show your calendars in Homebase</b>
+            <b style={{ fontSize: 14 }}>Show your calendars in Lar</b>
             <p className="muted" style={{ fontSize: 13.5, margin: '4px 0 10px' }}>
               Paste a private iCal link. Google: calendar settings → “Secret address in iCal format”. Apple: iCloud.com → share calendar → public link. Events show on the Today page.
             </p>
@@ -109,7 +109,7 @@ export function CalendarsCard() {
           </div>
         </div>
       </Card>
-      <Confirm open={confirm !== null} onClose={() => setConfirm(null)} title={`Remove ${confirm?.name}?`} body="Homebase stops showing its events. Nothing changes in the calendar itself." confirmLabel="Remove" onConfirm={() => confirm && remove.mutate(confirm.id)} />
+      <Confirm open={confirm !== null} onClose={() => setConfirm(null)} title={`Remove ${confirm?.name}?`} body="Lar stops showing its events. Nothing changes in the calendar itself." confirmLabel="Remove" onConfirm={() => confirm && remove.mutate(confirm.id)} />
     </>
   );
 }

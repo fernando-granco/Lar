@@ -17,7 +17,7 @@ export function App() {
   if (error || !data)
     return (
       <div className="welcome card">
-        <h1 className="display">Can't reach Homebase</h1>
+        <h1 className="display">Can't reach Lar</h1>
         <p className="muted">The server did not answer. Check that the container is running, then reload.</p>
       </div>
     );

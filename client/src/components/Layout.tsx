@@ -27,7 +27,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { data: summary } = useSummary();
   const me = useCurrentMember();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const name = household?.settings.household_name || 'Homebase';
+  const name = household?.settings.household_name || 'Lar';
 
   return (
     <div className="app">
@@ -36,7 +36,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <BrandMark />
           <span>
             {name}
-            {name !== 'Homebase' && <small>Homebase</small>}
+            <small>{name !== 'Lar' ? 'Lar' : "The family's home hub"}</small>
           </span>
         </Link>
         {NAV.map((n) => (

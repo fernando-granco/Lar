@@ -36,11 +36,11 @@ export function Welcome() {
     <div className="welcome card">
       <div className="row" style={{ marginBottom: 20 }}>
         <BrandMark />
-        <span className="display" style={{ fontSize: 20, fontWeight: 700 }}>Homebase</span>
+        <span className="display" style={{ fontSize: 20, fontWeight: 700 }}>Lar</span>
       </div>
       <h1>Welcome home.</h1>
       <p className="muted" style={{ marginBottom: 24 }}>
-        Let's set up your household. You can change all of this later.
+        Lar is the family's home hub. Let's set up your household; you can change all of this later.
       </p>
       <form className="form" onSubmit={submit}>
         <Field label="Household name" hint="optional">
@@ -62,7 +62,7 @@ export function Welcome() {
         </Field>
         {error && <p className="error">{error}</p>}
         <Button variant="primary" type="submit" block disabled={busy}>
-          {busy ? 'Setting up…' : 'Start using Homebase'}
+          {busy ? 'Setting up…' : 'Start using Lar'}
         </Button>
       </form>
     </div>

@@ -1,6 +1,6 @@
 /**
  * Model Context Protocol server, so agents (Hermes, Claude, anything MCP-aware)
- * can use Homebase as a tool. Mounted at /mcp on the same Express app,
+ * can use Lar as a tool. Mounted at /mcp on the same Express app,
  * stateless Streamable HTTP: every request gets a fresh server + transport.
  */
 import type { Express, Request, Response } from 'express';
@@ -136,10 +136,10 @@ const zNames = z.array(z.string()).optional().describe('People or group names, e
 // ---------- server factory ----------
 
 export function buildMcpServer(actor: Actor) {
-  const server = new McpServer({ name: 'homebase', version: '0.2.0' }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'lar', version: '0.2.0' }, { instructions: INSTRUCTIONS });
 
   server.registerTool(
-    'homebase_overview',
+    'lar_overview',
     {
       title: 'Household overview',
       description: 'Who lives here (people and groups), today\'s date, and counts of open to-dos, shopping items, and active projects. Call this first.',
@@ -253,7 +253,7 @@ export function buildMcpServer(actor: Actor) {
     'list_shopping',
     {
       title: 'List shopping items',
-      description: 'Items on a shopping list. Default list is "Household"; projects have their own lists. Lists available via homebase_overview or list "all".',
+      description: 'Items on a shopping list. Default list is "Household"; projects have their own lists. Lists available via lar_overview or list "all".',
       inputSchema: {
         list: z.string().optional().describe('List name or "all" to see every list with counts.'),
         status: z.enum(['open', 'checked', 'all']).default('open'),
@@ -460,8 +460,8 @@ export function buildMcpServer(actor: Actor) {
   return server;
 }
 
-const INSTRUCTIONS = `Homebase is a family's household hub: shared to-dos, shopping lists, and home projects.
-Start with homebase_overview to learn the people and groups. Refer to people and projects by name.
+const INSTRUCTIONS = `Lar is a family's household hub: shared to-dos, shopping lists, and home projects.
+Start with lar_overview to learn the people and groups. Refer to people and projects by name.
 "For" on a to-do or shopping item is who it applies to; empty means everyone in the household.
 Dates are YYYY-MM-DD in the household's local timezone.`;
 
@@ -469,7 +469,7 @@ Dates are YYYY-MM-DD in the household's local timezone.`;
 
 export function mountMcp(app: Express) {
   const handle = async (req: Request, res: Response) => {
-    const agent = req.header('x-homebase-agent') || 'agent';
+    const agent = req.header('x-lar-agent') || 'agent';
     const actor: Actor = { type: 'agent', id: null, name: agent.slice(0, 60) };
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     const server = buildMcpServer(actor);
@@ -486,6 +486,6 @@ export function mountMcp(app: Express) {
     }
   };
   app.post('/mcp', handle);
-  app.get('/mcp', (_req, res) => res.status(405).json({ error: 'Homebase MCP is stateless: send JSON-RPC over POST.' }));
+  app.get('/mcp', (_req, res) => res.status(405).json({ error: 'Lar MCP is stateless: send JSON-RPC over POST.' }));
   app.delete('/mcp', (_req, res) => res.status(405).end());
 }

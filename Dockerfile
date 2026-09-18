@@ -12,12 +12,12 @@ FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache python3 make g++ && \
-    addgroup -S homebase && adduser -S homebase -G homebase
+    addgroup -S lar && adduser -S lar -G lar
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && apk del python3 make g++ && npm cache clean --force
 COPY --from=build /app/dist ./dist
-RUN mkdir -p /app/data && chown -R homebase:homebase /app
-USER homebase
+RUN mkdir -p /app/data && chown -R lar:lar /app
+USER lar
 ENV PORT=3000
 ENV DATA_DIR=/app/data
 EXPOSE 3000

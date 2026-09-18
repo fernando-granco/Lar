@@ -41,8 +41,8 @@ function localToUtcStamp(dateIso: string, time: string) {
 }
 
 export function buildFeed(memberId?: number): string {
-  const name = getSetting('household_name', 'Homebase');
-  const lines: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Homebase//Household//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${esc(name)}`, 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
+  const name = getSetting('household_name', 'Lar');
+  const lines: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Lar//Household//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${esc(name)}`, 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
   const now = stampUtc(new Date());
 
   const cutoff = new Date();
@@ -55,8 +55,8 @@ export function buildFeed(memberId?: number): string {
   for (const t of loadTasks(where.join(' AND '), params)) {
     const done = t.status === 'done';
     const title = `${done ? '✓ ' : ''}${t.title}`;
-    const desc = [t.notes, t.project_id ? `Project: ${projectNames.get(t.project_id)}` : '', `Homebase to-do #${t.id}`].filter(Boolean).join('\n');
-    lines.push('BEGIN:VEVENT', `UID:homebase-task-${t.id}@homebase`, `DTSTAMP:${now}`, `SUMMARY:${esc(title)}`, `DESCRIPTION:${esc(desc)}`);
+    const desc = [t.notes, t.project_id ? `Project: ${projectNames.get(t.project_id)}` : '', `Lar to-do #${t.id}`].filter(Boolean).join('\n');
+    lines.push('BEGIN:VEVENT', `UID:lar-task-${t.id}@lar`, `DTSTAMP:${now}`, `SUMMARY:${esc(title)}`, `DESCRIPTION:${esc(desc)}`);
     if (t.due_time) {
       const start = localToUtcStamp(t.due_date!, t.due_time);
       const endDate = new Date(new Date(start.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, '$1-$2-$3T$4:$5:$6Z')).getTime() + 3600_000);
@@ -71,14 +71,14 @@ export function buildFeed(memberId?: number): string {
     .prepare(`SELECT m.*, p.name AS project_name FROM milestones m JOIN projects p ON p.id = m.project_id WHERE m.due_date IS NOT NULL AND p.archived = 0 ${memberId ? 'AND (p.owner_id = @member OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.member_id = @member))' : ''}`)
     .all(memberId ? { member: memberId } : {}) as any[];
   for (const m of milestones) {
-    lines.push('BEGIN:VEVENT', `UID:homebase-milestone-${m.id}@homebase`, `DTSTAMP:${now}`, `SUMMARY:${esc(`${m.done_at ? '✓ ' : '◆ '}${m.title} (${m.project_name})`)}`, `DESCRIPTION:${esc([m.description, `Milestone of project "${m.project_name}"`].filter(Boolean).join('\n'))}`, `DTSTART;VALUE=DATE:${dateVal(m.due_date)}`, `DTEND;VALUE=DATE:${nextDay(m.due_date)}`, 'TRANSP:TRANSPARENT', 'END:VEVENT');
+    lines.push('BEGIN:VEVENT', `UID:lar-milestone-${m.id}@lar`, `DTSTAMP:${now}`, `SUMMARY:${esc(`${m.done_at ? '✓ ' : '◆ '}${m.title} (${m.project_name})`)}`, `DESCRIPTION:${esc([m.description, `Milestone of project "${m.project_name}"`].filter(Boolean).join('\n'))}`, `DTSTART;VALUE=DATE:${dateVal(m.due_date)}`, `DTEND;VALUE=DATE:${nextDay(m.due_date)}`, 'TRANSP:TRANSPARENT', 'END:VEVENT');
   }
 
   const projects = db
     .prepare(`SELECT id, name, target_date FROM projects p WHERE target_date IS NOT NULL AND archived = 0 AND status <> 'done' ${memberId ? 'AND (p.owner_id = @member OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.member_id = @member))' : ''}`)
     .all(memberId ? { member: memberId } : {}) as any[];
   for (const p of projects) {
-    lines.push('BEGIN:VEVENT', `UID:homebase-project-${p.id}@homebase`, `DTSTAMP:${now}`, `SUMMARY:${esc(`🎯 ${p.name} target`)}`, `DTSTART;VALUE=DATE:${dateVal(p.target_date)}`, `DTEND;VALUE=DATE:${nextDay(p.target_date)}`, 'TRANSP:TRANSPARENT', 'END:VEVENT');
+    lines.push('BEGIN:VEVENT', `UID:lar-project-${p.id}@lar`, `DTSTAMP:${now}`, `SUMMARY:${esc(`🎯 ${p.name} target`)}`, `DTSTART;VALUE=DATE:${dateVal(p.target_date)}`, `DTEND;VALUE=DATE:${nextDay(p.target_date)}`, 'TRANSP:TRANSPARENT', 'END:VEVENT');
   }
 
   lines.push('END:VCALENDAR');
@@ -94,12 +94,12 @@ export function feedHandler(req: import('express').Request, res: import('express
   }
   const member = req.query.member ? Number(req.query.member) : undefined;
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-  res.setHeader('Content-Disposition', 'inline; filename="homebase.ics"');
+  res.setHeader('Content-Disposition', 'inline; filename="lar.ics"');
   res.setHeader('Cache-Control', 'no-cache');
   res.send(buildFeed(member && Number.isInteger(member) ? member : undefined));
 }
 
-calendar.get('/calendar/feed-info', handler(() => ({ token: getSetting('feed_token'), path: '/calendar/homebase.ics' })));
+calendar.get('/calendar/feed-info', handler(() => ({ token: getSetting('feed_token'), path: '/calendar/lar.ics' })));
 
 calendar.post(
   '/calendar/feed-token/rotate',
@@ -107,7 +107,7 @@ calendar.post(
     const token = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('');
     db.prepare("UPDATE settings SET value = ? WHERE key = 'feed_token'").run(token);
     logChange(actorFrom(req), 'updated', 'household', null, 'Rotated the calendar feed address');
-    return { token, path: '/calendar/homebase.ics' };
+    return { token, path: '/calendar/lar.ics' };
   }),
 );
 
@@ -189,7 +189,7 @@ async function fetchCalendar(url: string) {
   const timer = setTimeout(() => controller.abort(), 15_000);
   let text: string;
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Homebase/0.2 (+https://github.com/fernando-granco/Homebase)' }, signal: controller.signal, redirect: 'follow' });
+    const res = await fetch(url, { headers: { 'User-Agent': 'Lar/0.2 (+https://github.com/fernando-granco/Lar)' }, signal: controller.signal, redirect: 'follow' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     text = await res.text();
   } finally {

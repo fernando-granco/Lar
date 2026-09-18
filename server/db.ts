@@ -10,7 +10,13 @@ export const projectRoot = isDist ? path.resolve(here, '..', '..') : path.resolv
 export const dataDir = process.env.DATA_DIR || path.join(projectRoot, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
-export const db = new Database(path.join(dataDir, 'homebase.db'));
+// Installs from before the rename keep their data: move homebase.db to lar.db once.
+for (const suffix of ['', '-wal', '-shm']) {
+  const old = path.join(dataDir, `homebase.db${suffix}`);
+  const next = path.join(dataDir, `lar.db${suffix}`);
+  if (fs.existsSync(old) && !fs.existsSync(path.join(dataDir, 'lar.db'))) fs.renameSync(old, next);
+}
+export const db = new Database(path.join(dataDir, 'lar.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
