@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Lar. The family's home hub: self-hosted to-dos, shopping lists, and home projects.",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "engines": {
     "node": ">=20"
   },
