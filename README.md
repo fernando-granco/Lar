@@ -124,4 +124,4 @@ The server is Express plus better-sqlite3 (TypeScript). The client is React, Typ
 
 ## License
 
-MIT
+AGPL-3.0
