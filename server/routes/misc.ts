@@ -36,6 +36,7 @@ misc.get(
       tasks: ['GET /tasks?status=open|done|all&member=<id>&project=<id>|none&due=today|overdue|week|none|scheduled&q=', 'GET /tasks/:id', 'POST /tasks', 'PATCH /tasks/:id', 'POST /tasks/:id/complete', 'POST /tasks/:id/reopen', 'DELETE /tasks/:id', 'POST /tasks/reorder', 'POST /tasks/clear-completed'],
       shopping: ['GET /shopping/lists', 'POST /shopping/lists', 'PATCH /shopping/lists/:id', 'DELETE /shopping/lists/:id', 'POST /shopping/lists/:id/clear-checked', 'GET /shopping/items?list=<id>&status=open|checked|all&member=<id>', 'POST /shopping/items', 'PATCH /shopping/items/:id', 'POST /shopping/items/:id/check', 'POST /shopping/items/:id/uncheck', 'DELETE /shopping/items/:id', 'GET /shopping/suggestions?q='],
       projects: ['GET /projects?status=open|active|planned|idea|on_hold|done|all&member=<id>', 'GET /projects/:id', 'POST /projects', 'PATCH /projects/:id', 'DELETE /projects/:id', 'POST /projects/:id/milestones', 'PATCH /milestones/:id', 'DELETE /milestones/:id', 'POST /projects/:id/expenses', 'PATCH /expenses/:id', 'DELETE /expenses/:id', 'POST /projects/:id/links', 'PATCH /links/:id', 'DELETE /links/:id'],
+      recipes: ['GET /recipes?q=', 'GET /recipes/:id', 'POST /recipes', 'PATCH /recipes/:id', 'DELETE /recipes/:id', 'GET /menu?from=&to=', 'POST /menu', 'DELETE /menu/:id'],
       other: ['GET /summary', 'GET /activity?limit=&entity=&entity_id=', 'GET /events (server-sent events)', 'GET /health'],
     },
   })),

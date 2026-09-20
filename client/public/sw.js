@@ -1,6 +1,6 @@
 /* Lar service worker: makes the app installable and keeps the shell loading
    when the network is slow. Data always comes from the server. */
-const VERSION = 'lar-v3';
+const VERSION = 'lar-v4';
 const CORE = ['/', '/today', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {

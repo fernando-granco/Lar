@@ -12,6 +12,7 @@ import { ProjectDetail } from './pages/ProjectDetail';
 import { Household } from './pages/Household';
 import { CalendarPage } from './pages/Calendar';
 import { Welcome } from './pages/Welcome';
+import { Recipes } from './pages/Recipes';
 
 export function App() {
   useLiveUpdates();
@@ -54,6 +55,7 @@ export function App() {
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/household" element={<Household />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/recipes" element={data.settings.recipes_enabled ? <Recipes /> : <Navigate to="/household" replace />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
     </Layout>

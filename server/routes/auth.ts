@@ -62,14 +62,16 @@ auth.post(
   '/members/:id/password',
   handler((req) => {
     const id = idParam(req);
-    const row = db.prepare('SELECT id, name, password_hash FROM members WHERE id = ?').get(id) as { id: number; name: string; password_hash: string | null } | undefined;
+    const row = db.prepare('SELECT id, name, is_kid, password_hash FROM members WHERE id = ?').get(id) as { id: number; name: string; is_kid: number; password_hash: string | null } | undefined;
     if (!row) throw notFound('Member not found');
+    const actor = actorFrom(req);
+    if (row.is_kid && actor.type === 'member' && actor.id === id) throw new HttpError(403, 'Kid profiles cannot add or change their own password. Ask an adult in the household.');
     const body = parse(z.object({ password: z.string().min(4, 'Use at least 4 characters').max(200), current: z.string().max(200).optional() }), req.body);
     if (row.password_hash && !verifyPassword(body.current ?? '', row.password_hash)) throw new HttpError(401, 'The current password is wrong.');
     db.prepare('UPDATE members SET password_hash = ? WHERE id = ?').run(hashPassword(body.password), id);
     revokeUnlocks(id);
     const token = issueUnlock(id);
-    logChange(actorFrom(req), 'updated', 'household', id, `${row.name} ${row.password_hash ? 'changed' : 'added'} a profile password`);
+    logChange(actor, 'updated', 'household', id, `${row.name} ${row.password_hash ? 'changed' : 'added'} a profile password`);
     return { token, member: getMember(id) };
   }),
 );

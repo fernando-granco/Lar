@@ -17,6 +17,7 @@ type Draft = {
   category: string;
   notes: string;
   price: number | null;
+  priority: ShoppingItem['priority'];
   list_id: number;
   assignees: ShoppingItem['assignees'];
 };
@@ -24,16 +25,16 @@ type Draft = {
 export function ShoppingItemSheet({ open, onClose, item, listId, lists }: { open: boolean; onClose: () => void; item?: ShoppingItem | null; listId: number; lists?: ShoppingList[] }) {
   const { data: household } = useHousehold();
   const toast = useToast();
-  const [draft, setDraft] = useState<Draft>({ name: '', quantity: null, unit: '', category: '', notes: '', price: null, list_id: listId, assignees: { member_ids: [], group_ids: [] } });
+  const [draft, setDraft] = useState<Draft>({ name: '', quantity: null, unit: '', category: '', notes: '', price: null, priority: 'normal', list_id: listId, assignees: { member_ids: [], group_ids: [] } });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     if (item) {
-      const { name, quantity, unit, category, notes, price, list_id, assignees } = item;
-      setDraft({ name, quantity, unit, category, notes, price, list_id, assignees });
-    } else setDraft({ name: '', quantity: null, unit: '', category: '', notes: '', price: null, list_id: listId, assignees: { member_ids: [], group_ids: [] } });
+      const { name, quantity, unit, category, notes, price, priority, list_id, assignees } = item;
+      setDraft({ name, quantity, unit, category, notes, price, priority, list_id, assignees });
+    } else setDraft({ name: '', quantity: null, unit: '', category: '', notes: '', price: null, priority: 'normal', list_id: listId, assignees: { member_ids: [], group_ids: [] } });
     setError('');
   }, [open, item, listId]);
 
@@ -89,6 +90,14 @@ export function ShoppingItemSheet({ open, onClose, item, listId, lists }: { open
                   <option key={c} value={c} />
                 ))}
               </datalist>
+            </Field>
+            <Field label="Priority">
+              <Select value={draft.priority} onChange={(e) => set({ priority: e.target.value as ShoppingItem['priority'] })}>
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </Select>
             </Field>
           </div>
           <Field label="Who should pick it up">

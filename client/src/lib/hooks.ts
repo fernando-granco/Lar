@@ -13,6 +13,8 @@ export const keys = {
   projects: (p: object = {}) => ['projects', p] as QueryKey,
   project: (id: number) => ['project', id] as QueryKey,
   activity: (p: object = {}) => ['activity', p] as QueryKey,
+  recipes: (p: object = {}) => ['recipes', p] as QueryKey,
+  menu: (p: object = {}) => ['menu', p] as QueryKey,
 };
 
 export function useHousehold() {
@@ -61,6 +63,8 @@ export function useLiveUpdates() {
           qc.invalidateQueries({ queryKey: ['shopping'] });
           qc.invalidateQueries({ queryKey: ['tasks'] });
         }
+        if (ev.entity === 'recipe') qc.invalidateQueries({ queryKey: ['recipes'] });
+        if (ev.entity === 'menu') qc.invalidateQueries({ queryKey: ['menu'] });
       });
       es.onerror = () => {
         es?.close();

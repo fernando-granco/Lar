@@ -1,6 +1,6 @@
 import { CalendarDays, Repeat, AlignLeft, Hammer, Flag } from 'lucide-react';
-import { useHousehold, useInvalidatingMutation } from '@/lib/hooks';
-import { api } from '@/lib/api';
+import { useHousehold } from '@/lib/hooks';
+import { useDeferredCompletion } from '@/lib/completion';
 import { friendlyDate, dueTone } from '@/lib/format';
 import { CheckBox, AvatarStack, cx } from './ui';
 import type { Task } from '@shared/types';
@@ -8,11 +8,11 @@ import type { Task } from '@shared/types';
 export function TaskRow({ task, onOpen, projectName, showAssignees = true }: { task: Task; onOpen: (t: Task) => void; projectName?: string; showAssignees?: boolean }) {
   const { data: household } = useHousehold();
   const done = task.status === 'done';
-  const toggle = useInvalidatingMutation(() => (done ? api.reopenTask(task.id) : api.completeTask(task.id)), ['tasks', 'project', 'projects', 'summary']);
-  const tone = dueTone(task.due_date, done);
+  const completion = useDeferredCompletion('task', task.id, done);
+  const tone = dueTone(task.due_date, completion.checked);
   return (
-    <div className={cx('rowitem', done && 'done')} onClick={() => onOpen(task)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onOpen(task)}>
-      <CheckBox on={done} onToggle={() => toggle.mutate(undefined as never)} />
+    <div className={cx('rowitem', completion.checked && 'done', completion.pending && 'pending-done')} onClick={() => onOpen(task)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onOpen(task)}>
+      <CheckBox on={completion.checked} onToggle={() => void completion.toggle()} />
       <div className="body">
         <div className="title">{task.title}</div>
         <div className="meta">

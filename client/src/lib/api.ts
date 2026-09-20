@@ -1,6 +1,6 @@
 import type {
   Household, Member, Group, Settings, Task, ShoppingList, ShoppingItem, Project, ProjectDetail,
-  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent, Agenda,
+  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent, Agenda, Recipe, MenuEntry, MealType,
 } from '@shared/types';
 import { getCurrentMemberId, getUnlockToken, clearMember } from './store';
 
@@ -42,7 +42,7 @@ export type TaskInput = Partial<{
   recurrence: Recurrence | null; project_id: number | null; milestone_id: number | null; assignees: Assignees; status: Task['status'];
 }>;
 export type ShoppingItemInput = Partial<{
-  list_id: number; name: string; quantity: number | null; unit: string; category: string; notes: string; price: number | null; assignees: Assignees; checked: boolean;
+  list_id: number; name: string; quantity: number | null; unit: string; category: string; notes: string; price: number | null; priority: ShoppingItem['priority']; assignees: Assignees; checked: boolean;
 }>;
 export type ProjectInput = Partial<{
   name: string; description: string; status: Project['status']; priority: Project['priority']; color: string; icon: string;
@@ -54,8 +54,8 @@ export type ExpenseInput = Partial<{ title: string; amount: number; date: string
 export const api = {
   household: () => get<Household>('/household'),
   updateSettings: (s: Partial<Settings>) => patch<Settings>('/household/settings', s),
-  createMember: (m: { name: string; color?: string; initials?: string; email?: string }) => post<Member>('/members', m),
-  updateMember: (id: number, m: Partial<Pick<Member, 'name' | 'color' | 'initials' | 'email' | 'archived' | 'sort_order'>>) => patch<Member>(`/members/${id}`, m),
+  createMember: (m: { name: string; color?: string; initials?: string; email?: string; is_kid?: boolean }) => post<Member>('/members', m),
+  updateMember: (id: number, m: Partial<Pick<Member, 'name' | 'color' | 'initials' | 'email' | 'is_kid' | 'archived' | 'sort_order'>>) => patch<Member>(`/members/${id}`, m),
   unlock: (member_id: number, password: string) => post<{ token: string | null; member: Member }>('/auth/unlock', { member_id, password }),
   accessSignIn: () => post<{ configured: boolean; member: Member | null; token: string | null; email?: string }>('/auth/access'),
   setPassword: (id: number, password: string, current?: string) => post<{ token: string; member: Member }>(`/members/${id}/password`, { password, current }),
@@ -86,6 +86,15 @@ export const api = {
   deleteShoppingItem: (id: number) => del(`/shopping/items/${id}`),
   clearChecked: (listId: number) => post<{ deleted: number }>(`/shopping/lists/${listId}/clear-checked`),
   shoppingSuggestions: (q?: string) => get<{ name: string; category: string; unit: string; times: number }[]>(`/shopping/suggestions${qs({ q })}`),
+
+  recipes: (q?: string) => get<Recipe[]>(`/recipes${qs({ q })}`),
+  recipe: (id: number) => get<Recipe>(`/recipes/${id}`),
+  createRecipe: (r: Partial<Recipe> & { name: string }) => post<Recipe>('/recipes', r),
+  updateRecipe: (id: number, r: Partial<Recipe>) => patch<Recipe>(`/recipes/${id}`, r),
+  deleteRecipe: (id: number) => del(`/recipes/${id}`),
+  menu: (from: string, to: string) => get<MenuEntry[]>(`/menu${qs({ from, to })}`),
+  setMenuEntry: (m: { meal_date: string; meal_type: MealType; recipe_id?: number | null; custom_title?: string; notes?: string }) => post<MenuEntry>('/menu', m),
+  deleteMenuEntry: (id: number) => del(`/menu/${id}`),
 
   projects: (p: { status?: string; archived?: boolean; member?: number; q?: string } = {}) => get<Project[]>(`/projects${qs(p)}`),
   project: (id: number) => get<ProjectDetail>(`/projects/${id}`),

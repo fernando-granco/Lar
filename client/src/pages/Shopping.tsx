@@ -10,7 +10,7 @@ import { Sheet, Confirm } from '@/components/Sheet';
 import { ShoppingRow } from '@/components/ShoppingRow';
 import { ShoppingItemSheet } from '@/components/ShoppingItemSheet';
 import { useToast } from '@/components/Toast';
-import type { ShoppingItem, ShoppingList } from '@shared/types';
+import type { ShoppingItem, ShoppingList, ShoppingPriority } from '@shared/types';
 
 export function Shopping() {
   const me = useCurrentMember();
@@ -22,13 +22,17 @@ export function Shopping() {
   const itemsQ = useQuery({ queryKey: keys.shoppingItems({ list: listId, member: mine ? me!.id : undefined }), queryFn: () => api.shoppingItems({ list: listId, member: mine ? me!.id : undefined }) });
   const [edit, setEdit] = useState<ShoppingItem | null | 'new'>(null);
   const [quick, setQuick] = useState('');
+  const [quickPriority, setQuickPriority] = useState<ShoppingPriority>('normal');
   const [focused, setFocused] = useState(false);
   const suggQ = useQuery({ queryKey: ['shopping', 'suggestions', quick], queryFn: () => api.shoppingSuggestions(quick || undefined), enabled: focused });
   const [listSheet, setListSheet] = useState<'new' | ShoppingList | null>(null);
   const [listName, setListName] = useState('');
   const [confirmDeleteList, setConfirmDeleteList] = useState(false);
 
-  const create = useInvalidatingMutation((text: string) => api.createShoppingItem({ list_id: listId, ...parseShoppingText(text) }), ['shopping', 'summary']);
+  const create = useInvalidatingMutation(({ text, priority }: { text: string; priority?: ShoppingPriority }) => {
+    const parsed = parseShoppingText(text);
+    return api.createShoppingItem({ list_id: listId, ...parsed, priority: parsed.priority ?? priority ?? 'normal' });
+  }, ['shopping', 'summary']);
   const clear = useInvalidatingMutation(() => api.clearChecked(listId), ['shopping', 'summary']);
   const saveList = useInvalidatingMutation((name: string) => (listSheet === 'new' ? api.createShoppingList(name) : api.renameShoppingList((listSheet as ShoppingList).id, name)), ['shopping']);
   const deleteList = useInvalidatingMutation(() => api.deleteShoppingList(listId), ['shopping', 'summary']);
@@ -51,7 +55,8 @@ export function Shopping() {
     const text = quick.trim();
     if (!text) return;
     setQuick('');
-    await create.mutateAsync(text);
+    await create.mutateAsync({ text, priority: quickPriority });
+    setQuickPriority('normal');
   };
 
   return (
@@ -95,10 +100,23 @@ export function Shopping() {
           <span className="hint">Enter to add</span>
           <Button variant="primary" size="sm" type="submit" disabled={!quick.trim()}>Add</Button>
         </form>
+        <div className="quick-options">
+          <span>Priority</span>
+          <Segmented<ShoppingPriority>
+            value={quickPriority}
+            onChange={setQuickPriority}
+            options={[
+              { value: 'normal', label: 'Normal' },
+              { value: 'high', label: 'High' },
+              { value: 'urgent', label: 'Urgent' },
+              { value: 'low', label: 'Low' },
+            ]}
+          />
+        </div>
         {focused && suggestions.length > 0 && (
           <div className="chip-row" style={{ marginTop: 8 }}>
             {suggestions.map((s) => (
-              <Chip key={s.name} onMouseDown={(e) => e.preventDefault()} onClick={() => create.mutate(s.name)}>
+              <Chip key={s.name} onMouseDown={(e) => e.preventDefault()} onClick={() => create.mutate({ text: s.name, priority: quickPriority })}>
                 <Plus /> {s.name}
               </Chip>
             ))}

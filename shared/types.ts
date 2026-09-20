@@ -4,6 +4,7 @@ export type ProjectStatus = 'idea' | 'planned' | 'active' | 'on_hold' | 'done';
 export type ProjectPriority = 'low' | 'normal' | 'high';
 export type TaskStatus = 'open' | 'done';
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type ShoppingPriority = TaskPriority;
 export type RecurrenceFreq = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export interface Recurrence {
@@ -20,6 +21,7 @@ export interface Member {
   sort_order: number;
   archived: boolean;
   email: string | null;
+  is_kid: boolean;
   /** True when this person set a profile password. Devices must unlock them once. */
   has_password: boolean;
 }
@@ -40,6 +42,8 @@ export interface Settings {
   allow_private_calendar_urls: boolean;
   /** True when Cloudflare Access sign-in is configured on the server. */
   access_sign_in: boolean;
+  /** Recipes and the weekly menu are hidden until the household enables them. */
+  recipes_enabled: boolean;
 }
 
 export interface Household {
@@ -91,6 +95,7 @@ export interface ShoppingItem {
   category: string;
   notes: string;
   price: number | null;
+  priority: ShoppingPriority;
   checked_at: string | null;
   checked_by: number | null;
   sort_order: number;
@@ -193,10 +198,38 @@ export interface Summary {
 
 /** Server-sent event payload. */
 export interface ChangeEvent {
-  entity: 'household' | 'task' | 'shopping' | 'project' | 'activity';
+  entity: 'household' | 'task' | 'shopping' | 'project' | 'recipe' | 'menu' | 'activity';
   id?: number;
   action: 'created' | 'updated' | 'deleted' | 'reordered';
   actor?: string;
+}
+
+export interface Recipe {
+  id: number;
+  name: string;
+  description: string;
+  ingredients: string;
+  instructions: string;
+  prep_minutes: number | null;
+  tags: string;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner';
+
+export interface MenuEntry {
+  id: number;
+  meal_date: string;
+  meal_type: MealType;
+  recipe_id: number | null;
+  recipe_name: string | null;
+  custom_title: string;
+  notes: string;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Calendar {

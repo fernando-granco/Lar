@@ -13,10 +13,13 @@ import { ShoppingItemSheet } from '@/components/ShoppingItemSheet';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { CalendarCard } from '@/components/CalendarCard';
 import { PROJECT_STATUS } from '@/lib/format';
+import { usePrefs } from '@/lib/store';
+import { MenuCard } from '@/components/MenuCard';
 import type { Task, ShoppingItem } from '@shared/types';
 
 export function Today() {
   const me = useCurrentMember();
+  const prefs = usePrefs();
   const { data: household } = useHousehold();
   const { data: summary } = useSummary();
   const tasksQ = useQuery({ queryKey: keys.tasks({ status: 'open', member: me?.id }), queryFn: () => api.tasks({ status: 'open', member: me?.id }) });
@@ -35,6 +38,7 @@ export function Today() {
   const upcoming = tasks.filter((x) => x.due_date && x.due_date > t && x.due_date <= weekEnd);
   const projectName = (id: number | null) => allProjQ.data?.find((p) => p.id === id)?.name;
   const dateLine = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const sectionOrder = (key: typeof prefs.dashboardOrder[number]) => prefs.dashboardOrder.indexOf(key);
 
   return (
     <div className="page">
@@ -68,8 +72,9 @@ export function Today() {
         </div>
       )}
 
-      <div className="grid-2">
-        <Card title={me ? 'Needs your attention' : 'Needs attention'} icon={CheckSquare} flush action={<Link to="/todos" className="btn btn-ghost btn-sm">All to-dos <ArrowRight /></Link>}>
+      <div className="dashboard-sections">
+        <div style={{ order: sectionOrder('todos') }}>
+          <Card title={me ? 'Needs your attention' : 'Needs attention'} icon={CheckSquare} flush action={<Link to="/todos" className="btn btn-ghost btn-sm">All to-dos <ArrowRight /></Link>}>
           {tasksQ.isLoading ? null : attention.length ? (
             <div className="list">{attention.slice(0, 6).map((x) => <TaskRow key={x.id} task={x} onOpen={setEditTask} projectName={projectName(x.project_id)} />)}</div>
           ) : (
@@ -81,9 +86,11 @@ export function Today() {
               <div className="list">{upcoming.slice(0, 6 - attention.length).map((x) => <TaskRow key={x.id} task={x} onOpen={setEditTask} projectName={projectName(x.project_id)} />)}</div>
             </div>
           )}
-        </Card>
+          </Card>
+        </div>
 
-        <Card title="Shopping list" icon={ShoppingBasket} flush action={<Link to="/shopping" className="btn btn-ghost btn-sm">Open list <ArrowRight /></Link>}>
+        <div style={{ order: sectionOrder('shopping') }}>
+          <Card title="Shopping list" icon={ShoppingBasket} flush action={<Link to="/shopping" className="btn btn-ghost btn-sm">Open list <ArrowRight /></Link>}>
           {shopQ.isLoading ? null : shopQ.data?.length ? (
             <div className="list">{shopQ.data.slice(0, 6).map((i) => <ShoppingRow key={i.id} item={i} onOpen={setEditItem} />)}</div>
           ) : (
@@ -94,13 +101,16 @@ export function Today() {
               <span className="muted">and {shopQ.data!.length - 6} more…</span>
             </Link>
           )}
-        </Card>
-      </div>
+          </Card>
+        </div>
 
-      <CalendarCard />
+        <div style={{ order: sectionOrder('calendar') }}><CalendarCard /></div>
 
-      {!!projQ.data?.length && (
-      <Card title={me ? 'Your projects in motion' : 'Projects in motion'} icon={Hammer} action={<Link to="/projects" className="btn btn-ghost btn-sm">All projects <ArrowRight /></Link>}>
+        {household?.settings.recipes_enabled && <div style={{ order: sectionOrder('menu') }}><MenuCard /></div>}
+
+        {!!projQ.data?.length && (
+        <div style={{ order: sectionOrder('projects') }}>
+        <Card title={me ? 'Your projects in motion' : 'Projects in motion'} icon={Hammer} action={<Link to="/projects" className="btn btn-ghost btn-sm">All projects <ArrowRight /></Link>}>
         {projQ.data?.length ? (
           <div className="project-grid">
             {projQ.data.slice(0, 3).map((p) => {
@@ -125,8 +135,10 @@ export function Today() {
             })}
           </div>
         ) : null}
-      </Card>
-      )}
+        </Card>
+        </div>
+        )}
+      </div>
 
       <section className="card">
         <button type="button" className="card-head" style={{ width: '100%', textAlign: 'left', paddingBottom: showActivity ? 6 : 16 }} onClick={() => setShowActivity((v) => !v)} aria-expanded={showActivity}>

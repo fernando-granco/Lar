@@ -14,6 +14,7 @@ import { mountMcp } from './mcp.js';
 import { calendar, feedHandler } from './routes/calendar.js';
 import { backup } from './routes/backup.js';
 import { auth } from './routes/auth.js';
+import { recipes } from './routes/recipes.js';
 import { requireUnlock } from './auth.js';
 
 const app = express();
@@ -69,7 +70,7 @@ app.use(['/api', '/mcp'], (req, res, next) => {
 app.use('/api', requireUnlock);
 
 const api = express.Router();
-api.use(auth, household, tasks, shopping, projects, calendar, backup, misc);
+api.use(auth, household, tasks, shopping, projects, recipes, calendar, backup, misc);
 app.use('/api/v1', api);
 mountMcp(app);
 app.get('/calendar/lar.ics', feedHandler);

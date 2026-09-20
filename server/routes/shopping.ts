@@ -75,6 +75,7 @@ const itemBody = z.object({
   category: z.string().trim().max(40).default(''),
   notes: z.string().max(2000).default(''),
   price: z.number().min(0).nullable().default(null),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
   assignees: zAssignees,
 });
 
@@ -117,8 +118,8 @@ export function createShoppingItem(input: z.input<typeof itemBody>, actor: Actor
   const id = Number(
     db
       .prepare(
-        `INSERT INTO shopping_items (list_id, name, quantity, unit, category, notes, price, sort_order, created_by)
-         VALUES (@list_id, @name, @quantity, @unit, @category, @notes, @price, @order, @created_by)`,
+        `INSERT INTO shopping_items (list_id, name, quantity, unit, category, notes, price, priority, sort_order, created_by)
+         VALUES (@list_id, @name, @quantity, @unit, @category, @notes, @price, @priority, @order, @created_by)`,
       )
       .run({
         ...body,
@@ -149,8 +150,8 @@ export function updateShoppingItem(id: number, input: unknown, actor: Actor): Sh
   const next = { ...current, ...body };
   if (body.list_id && !db.prepare('SELECT 1 FROM shopping_lists WHERE id = ?').get(body.list_id)) throw badRequest('List does not exist');
   db.prepare(
-    `UPDATE shopping_items SET list_id=@list_id, name=@name, quantity=@quantity, unit=@unit, category=@category, notes=@notes, price=@price, updated_at=@now WHERE id=@id`,
-  ).run({ id, list_id: next.list_id, name: next.name, quantity: next.quantity, unit: next.unit, category: next.category, notes: next.notes, price: next.price, now: nowIso() });
+    `UPDATE shopping_items SET list_id=@list_id, name=@name, quantity=@quantity, unit=@unit, category=@category, notes=@notes, price=@price, priority=@priority, updated_at=@now WHERE id=@id`,
+  ).run({ id, list_id: next.list_id, name: next.name, quantity: next.quantity, unit: next.unit, category: next.category, notes: next.notes, price: next.price, priority: next.priority, now: nowIso() });
   if (body.assignees) setAssignees('shopping_item', id, body.assignees);
   if (body.checked !== undefined && body.checked !== !!current.checked_at) return setChecked(id, body.checked, actor);
   const item = getShoppingItem(id)!;

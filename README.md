@@ -7,11 +7,12 @@
 ## What it does
 
 - **To-dos** for everyone or for specific people and groups (like "Kids"). Due dates, priorities, repeating chores, and a quick-add that understands "Call plumber tomorrow !high".
-- **Shopping list** with quantities, aisle grouping, suggestions from what you usually buy, and extra lists for the hardware store or a big Costco run. "2x oat milk" just works.
+- **Shopping list** with priorities, quantities, aisle grouping, suggestions from what you usually buy, extra lists, and a one-tap mobile fast-add. "2x oat milk !urgent" just works.
 - **Projects** with milestones, to-dos, a shopping list inside the project, budget and expense tracking, notes, and links. Enough to run a backyard refresh or a kitchen remodel without becoming a chore itself.
-- **Today** view that shows what needs attention right now.
+- **Today** view that shows what needs attention right now, in the order each device prefers.
+- **Recipes and weekly menu**, opt-in from Household settings so families that do not need it keep a simpler Lar.
 - **Live updates** between phones and computers on the network.
-- **Phone friendly** and installable to the home screen. Light and dark themes.
+- **Phone friendly** and installable to the home screen. Light and dark themes, larger text options, and configurable checked-item behaviour.
 - **REST API** for scripts and agents, with an activity log of who changed what.
 
 ## Run it with Docker
@@ -43,6 +44,7 @@ Your data lives in the `lar-data` Docker volume as a single SQLite file.
 Lar has no accounts. Each device picks a person from the household, and that choice is remembered. Anyone who can reach Lar can read and change everything, which is the point for a family on a home network.
 
 - **Optional profile password.** Any person can add a password to their profile on the Household page. From then on a device must enter it once before acting as that person. Everything else stays open. Forgot it? On the server: `docker exec lar node dist/server/cli.js reset-password NAME`.
+- **Kid profiles.** Mark a person as a kid to prevent that profile from adding people, removing itself, or adding/changing its own password. These limits are enforced by the API as well as hidden in the interface.
 - **Keep it on your LAN.** To use Lar away from home, put it behind HTTPS and an auth layer (Cloudflare Access, Authelia, Tailscale, or similar). See the Cloudflare Access section below: with a little configuration it also signs people in automatically.
 - **Agents.** Set `LAR_API_KEY` so only automations that know the key can act as an agent (see Agents below). It does not protect the browser app.
 
@@ -67,6 +69,7 @@ Everything the app does is available under `/api/v1`. Send `X-Lar-Member: <id>` 
 | To-dos | `GET /tasks?status=open&member=1&due=today`, `POST /tasks`, `PATCH /tasks/:id`, `POST /tasks/:id/complete`, `POST /tasks/:id/reopen`, `DELETE /tasks/:id` |
 | Shopping | `GET /shopping/lists`, `GET /shopping/items?list=1&status=open`, `POST /shopping/items`, `POST /shopping/items/:id/check`, `POST /shopping/lists/:id/clear-checked` |
 | Projects | `GET /projects`, `GET /projects/:id` (full detail), `POST /projects`, `PATCH /projects/:id`, plus `/projects/:id/milestones`, `/projects/:id/expenses`, `/projects/:id/links` |
+| Recipes | `GET/POST /recipes`, `GET/PATCH/DELETE /recipes/:id`, `GET /menu?from=YYYY-MM-DD&to=YYYY-MM-DD`, `POST /menu`, `DELETE /menu/:id` |
 | Calendar | `GET /calendars`, `POST /calendars`, `GET /calendar/events?days=7`, `GET /calendar/feed-info`; public feed at `/calendar/lar.ics?token=…` |
 | Other | `GET /summary`, `GET /activity`, `GET /events` (server-sent events), `GET /backup`, `POST /restore`, `GET /health` |
 
@@ -80,7 +83,7 @@ curl -X POST http://YOUR-SERVER-IP:3001/api/v1/shopping/items \
 
 ## Agents (MCP)
 
-Lar is an MCP server. Point any Model Context Protocol client at `http://YOUR-SERVER-IP:3001/mcp` (Streamable HTTP, stateless) and it gets tools such as `lar_overview`, `list_todos`, `add_todo`, `complete_todo`, `add_shopping_items`, `check_shopping_items`, `list_projects`, `get_project`, `add_milestone`, and `add_expense`. Tools take people and projects by name, so "add oat milk for Fernando" just works.
+Lar is an MCP server. Point any Model Context Protocol client at `http://YOUR-SERVER-IP:3001/mcp` (Streamable HTTP, stateless) and it gets tools such as `lar_overview`, `list_todos`, `add_todo`, `complete_todo`, `add_shopping_items`, `check_shopping_items`, `list_projects`, `get_project`, `add_milestone`, `add_expense`, `list_recipes`, and `plan_meal`. Tools take people and projects by name, so "add urgent oat milk for Fernando" or "plan tacos for Friday dinner" just works.
 
 Send `X-Lar-Agent: <name>` so the activity log says who did it. If `LAR_API_KEY` is set, also send `Authorization: Bearer <key>`.
 

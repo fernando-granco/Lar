@@ -40,8 +40,8 @@ export const emptyAssignees = (): Assignees => ({ member_ids: [], group_ids: [] 
 
 // ---------- Members & groups ----------
 
-const MEMBER_COLS = 'id, name, color, initials, sort_order, archived, email, (password_hash IS NOT NULL) AS has_password';
-const mapMember = (r: any): Member => ({ ...r, archived: !!r.archived, has_password: !!r.has_password, email: r.email ?? null });
+const MEMBER_COLS = 'id, name, color, initials, sort_order, archived, email, is_kid, (password_hash IS NOT NULL) AS has_password';
+const mapMember = (r: any): Member => ({ ...r, archived: !!r.archived, is_kid: !!r.is_kid, has_password: !!r.has_password, email: r.email ?? null });
 
 export function listMembers(includeArchived = false): Member[] {
   const rows = db.prepare(`SELECT ${MEMBER_COLS} FROM members ${includeArchived ? '' : 'WHERE archived = 0'} ORDER BY sort_order, id`).all() as any[];
@@ -121,7 +121,9 @@ export function mapShoppingItem(r: any, assignees?: Assignees): ShoppingItem {
   return { ...r, assignees: assignees ?? emptyAssignees() };
 }
 
-export const SHOPPING_ORDER = `ORDER BY CASE WHEN s.checked_at IS NULL THEN 0 ELSE 1 END, s.category, s.sort_order, s.id`;
+export const SHOPPING_ORDER = `ORDER BY CASE WHEN s.checked_at IS NULL THEN 0 ELSE 1 END,
+  CASE s.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
+  s.category, s.sort_order, s.id`;
 
 export function loadShoppingItems(where: string, params: Record<string, unknown> = {}): ShoppingItem[] {
   const rows = db.prepare(`SELECT s.* FROM shopping_items s WHERE ${where} ${SHOPPING_ORDER}`).all(params) as any[];

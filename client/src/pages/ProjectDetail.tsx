@@ -322,7 +322,10 @@ function ProjectShopping({ p, currency }: { p: PD; currency: string }) {
   const [edit, setEdit] = useState<ShoppingItem | null | 'new'>(null);
   const [quick, setQuick] = useState('');
   const [expenseFrom, setExpenseFrom] = useState<ShoppingItem | null>(null);
-  const create = useInvalidatingMutation((text: string) => api.createShoppingItem({ list_id: p.shopping_list.id, ...parseShoppingText(text) }), ['project', 'projects', 'shopping']);
+  const create = useInvalidatingMutation((text: string) => {
+    const parsed = parseShoppingText(text);
+    return api.createShoppingItem({ list_id: p.shopping_list.id, ...parsed, priority: parsed.priority ?? 'normal' });
+  }, ['project', 'projects', 'shopping']);
   const clear = useInvalidatingMutation(() => api.clearChecked(p.shopping_list.id), ['project', 'projects', 'shopping']);
   const open = p.shopping_items.filter((i) => !i.checked_at);
   const checked = p.shopping_items.filter((i) => !!i.checked_at);

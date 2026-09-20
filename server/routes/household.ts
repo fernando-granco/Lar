@@ -1,45 +1,47 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, getSetting, setSetting } from '../db.js';
-import { handler, parse, idParam, notFound, badRequest, zColor, zIdList } from '../http.js';
+import { handler, parse, idParam, notFound, badRequest, HttpError, zColor, zIdList } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { listMembers, listGroups, getMember } from '../repo.js';
-import { cfAccessConfigured } from '../auth.js';
+import { cfAccessEmail } from '../auth.js';
 import type { Household } from '../../shared/types.js';
 
 export const household = Router();
 
-export function loadHousehold(): Household {
+export function loadHousehold(accessSignIn = false): Household {
   return {
     settings: {
       household_name: getSetting('household_name', 'Lar'),
       currency: getSetting('currency', 'USD'),
       week_starts_on: (getSetting('week_starts_on', 'monday') as 'monday' | 'sunday') || 'monday',
       allow_private_calendar_urls: getSetting('allow_private_calendar_urls', '0') === '1',
-      access_sign_in: cfAccessConfigured,
+      access_sign_in: accessSignIn,
+      recipes_enabled: getSetting('recipes_enabled', '0') === '1',
     },
     members: listMembers(),
     groups: listGroups(),
   };
 }
 
-household.get('/household', handler(() => loadHousehold()));
+household.get('/household', handler(async (req) => loadHousehold(Boolean(await cfAccessEmail(req)))));
 
 household.patch(
   '/household/settings',
-  handler((req) => {
+  handler(async (req) => {
     const body = parse(
       z.object({
         household_name: z.string().trim().min(1).max(60).optional(),
         currency: z.string().trim().length(3).toUpperCase().optional(),
         week_starts_on: z.enum(['monday', 'sunday']).optional(),
         allow_private_calendar_urls: z.boolean().optional(),
+        recipes_enabled: z.boolean().optional(),
       }),
       req.body,
     );
     for (const [k, v] of Object.entries(body)) if (v !== undefined) setSetting(k, typeof v === 'boolean' ? (v ? '1' : '0') : v);
     logChange(actorFrom(req), 'updated', 'household', null, 'Updated household settings');
-    return loadHousehold().settings;
+    return loadHousehold(Boolean(await cfAccessEmail(req))).settings;
   }),
 );
 
@@ -50,7 +52,15 @@ const memberBody = z.object({
   color: zColor.optional(),
   initials: z.string().trim().max(3).optional(),
   email: z.string().trim().toLowerCase().email().max(120).nullable().optional(),
+  is_kid: z.boolean().optional(),
 });
+
+function kidActor(req: import('express').Request) {
+  const actor = actorFrom(req);
+  if (actor.type !== 'member' || !actor.id) return null;
+  const member = getMember(actor.id);
+  return member?.is_kid ? member : null;
+}
 
 const initialsFor = (name: string) =>
   name
@@ -63,11 +73,12 @@ const initialsFor = (name: string) =>
 household.post(
   '/members',
   handler((req, res) => {
+    if (kidActor(req)) throw new HttpError(403, 'Kid profiles cannot add people. Ask an adult in the household.');
     const body = parse(memberBody, req.body);
     const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM members').get() as any).n;
     const result = db
-      .prepare('INSERT INTO members (name, color, initials, sort_order, email) VALUES (?, ?, ?, ?, ?)')
-      .run(body.name, body.color ?? pickColor(order), body.initials || initialsFor(body.name), order, body.email || null);
+      .prepare('INSERT INTO members (name, color, initials, sort_order, email, is_kid) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(body.name, body.color ?? pickColor(order), body.initials || initialsFor(body.name), order, body.email || null, body.is_kid ? 1 : 0);
     const member = getMember(Number(result.lastInsertRowid))!;
     logChange(actorFrom(req), 'created', 'household', member.id, `Added ${member.name} to the household`);
     res.status(201);
@@ -82,13 +93,16 @@ household.patch(
     const current = getMember(id);
     if (!current) throw notFound('Member not found');
     const body = parse(memberBody.partial().extend({ archived: z.boolean().optional(), sort_order: z.number().int().optional() }), req.body);
-    db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ?, email = ? WHERE id = ?').run(
+    const kid = kidActor(req);
+    if (kid && body.is_kid !== undefined && body.is_kid !== current.is_kid) throw new HttpError(403, 'Kid profiles cannot change family permission levels.');
+    db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ?, email = ?, is_kid = ? WHERE id = ?').run(
       body.name ?? current.name,
       body.color ?? current.color,
       body.initials ?? (body.name ? initialsFor(body.name) : current.initials),
       body.archived === undefined ? (current.archived ? 1 : 0) : body.archived ? 1 : 0,
       body.sort_order ?? current.sort_order,
       body.email === undefined ? current.email : body.email || null,
+      body.is_kid === undefined ? (current.is_kid ? 1 : 0) : body.is_kid ? 1 : 0,
       id,
     );
     const member = getMember(id)!;
@@ -103,6 +117,8 @@ household.delete(
     const id = idParam(req);
     const current = getMember(id);
     if (!current) throw notFound('Member not found');
+    const kid = kidActor(req);
+    if (kid?.id === id) throw new HttpError(403, 'Kid profiles cannot remove themselves. Ask an adult in the household.');
     db.prepare('DELETE FROM members WHERE id = ?').run(id);
     logChange(actorFrom(req), 'deleted', 'household', id, `Removed ${current.name} from the household`);
     res.status(204);

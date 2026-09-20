@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Sun, CheckSquare, ShoppingBasket, Hammer, Settings, UserRound, ChevronsUpDown } from 'lucide-react';
+import { Sun, CheckSquare, ShoppingBasket, Hammer, Settings, UserRound, ChevronsUpDown, Soup } from 'lucide-react';
 import { useHousehold, useSummary, useCurrentMember } from '@/lib/hooks';
 import { Avatar } from './ui';
 import { MemberPicker } from './MemberPicker';
+import { MobileQuickShopping } from './MobileQuickShopping';
 
 export function BrandMark() {
   return <img className="brand-mark" src="/lar.png" alt="" width={30} height={30} aria-hidden />;
@@ -22,6 +23,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const me = useCurrentMember();
   const [pickerOpen, setPickerOpen] = useState(false);
   const name = household?.settings.household_name || 'Lar';
+  const nav = household?.settings.recipes_enabled ? [...NAV, { to: '/recipes', label: 'Recipes', icon: Soup, key: '' } as const] : NAV;
 
   return (
     <div className="app">
@@ -33,7 +35,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <small>{name !== 'Lar' ? 'Lar' : "The family's home hub"}</small>
           </span>
         </Link>
-        {NAV.map((n) => (
+        {nav.map((n) => (
           <NavLink key={n.to} to={n.to} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <n.icon />
             {n.label}
@@ -67,7 +69,8 @@ export function Layout({ children }: { children: ReactNode }) {
           <BrandMark />
           {name}
         </Link>
-        <button type="button" className="right" style={{ display: 'flex' }} onClick={() => setPickerOpen(true)} aria-label="Choose who you are">
+        <MobileQuickShopping />
+        <button type="button" style={{ display: 'flex' }} onClick={() => setPickerOpen(true)} aria-label="Choose who you are">
           {me ? (
             <Avatar member={me} />
           ) : (
@@ -81,7 +84,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="main">{children}</main>
 
       <nav className="tabbar">
-        {NAV.map((n) => (
+        {nav.map((n) => (
           <NavLink key={n.to} to={n.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             <n.icon />
             {n.label}

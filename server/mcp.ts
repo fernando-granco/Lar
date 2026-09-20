@@ -16,6 +16,7 @@ import { queryTasks, createTask, updateTask, setDone, deleteTask } from './route
 import { listShoppingLists, queryShoppingItems, createShoppingItem, updateShoppingItem, setChecked, deleteShoppingItem, clearChecked } from './routes/shopping.js';
 import { queryProjects, getProjectDetail, createProject, updateProject, createMilestone, updateMilestone, createExpense } from './routes/projects.js';
 import { summary } from './routes/misc.js';
+import { listRecipes, createRecipe, updateRecipe, deleteRecipe, listMenu, upsertMenuEntry, deleteMenuEntry } from './routes/recipes.js';
 import { parseShoppingText, parseTaskText } from '../shared/parse.js';
 import type { Assignees, Task, ShoppingItem, Project } from '../shared/types.js';
 
@@ -121,6 +122,7 @@ function compactItem(i: ShoppingItem, ms = memberNames(), gs = groupNames()) {
     quantity: i.quantity,
     unit: i.unit || undefined,
     category: i.category || undefined,
+    priority: i.priority,
     checked: !!i.checked_at,
     for: describeAssignees(i.assignees, ms, gs),
     notes: i.notes || undefined,
@@ -132,6 +134,11 @@ const projectNames = () => new Map(queryProjects({ status: 'all', archived: fals
 
 const zDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD');
 const zNames = z.array(z.string()).optional().describe('People or group names, e.g. ["Fernando"] or ["Kids"]. Omit or empty = everyone.');
+const addIsoDays = (iso: string, days: number) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(Date.UTC(y!, m! - 1, d! + days));
+  return date.toISOString().slice(0, 10);
+};
 
 // ---------- server factory ----------
 
@@ -280,15 +287,19 @@ export function buildMcpServer(actor: Actor) {
         items: z.array(z.string().min(1)).min(1),
         list: z.string().optional().describe('List or project name. Default: Household.'),
         category: z.string().optional(),
+        priority: z.enum(['low', 'normal', 'high', 'urgent']).optional().describe('Applies to all items unless the item text contains !low, !high, or !urgent.'),
         for: zNames,
         notes: z.string().optional(),
       },
     },
-    ({ items, list, category, for: names, notes }) =>
+    ({ items, list, category, priority, for: names, notes }) =>
       run(() => {
         const listId = resolveList(list) ;
         const assignees = resolveAssignees(names);
-        return items.map((raw) => compactItem(createShoppingItem({ list_id: listId, ...parseShoppingText(raw), category: category ?? '', notes: notes ?? '', assignees }, actor)));
+        return items.map((raw) => {
+          const parsed = parseShoppingText(raw);
+          return compactItem(createShoppingItem({ list_id: listId, ...parsed, priority: parsed.priority ?? priority ?? 'normal', category: category ?? '', notes: notes ?? '', assignees }, actor));
+        });
       }),
   );
 
@@ -296,8 +307,8 @@ export function buildMcpServer(actor: Actor) {
     'update_shopping_item',
     {
       title: 'Update a shopping item',
-      description: 'Change quantity, name, category, notes, or who it is for.',
-      inputSchema: { id: z.number().int(), name: z.string().optional(), quantity: z.number().nullable().optional(), unit: z.string().optional(), category: z.string().optional(), notes: z.string().optional(), for: zNames },
+      description: 'Change quantity, name, priority, category, notes, or who it is for.',
+      inputSchema: { id: z.number().int(), name: z.string().optional(), quantity: z.number().nullable().optional(), unit: z.string().optional(), category: z.string().optional(), priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(), notes: z.string().optional(), for: zNames },
     },
     ({ id, for: names, ...rest }) =>
       run(() => {
@@ -457,10 +468,59 @@ export function buildMcpServer(actor: Actor) {
     ({ limit }) => run(() => db.prepare('SELECT actor_name, summary, created_at FROM activity ORDER BY id DESC LIMIT ?').all(limit)),
   );
 
+  // ----- optional recipes & weekly menu -----
+  server.registerTool(
+    'list_recipes',
+    { title: 'List recipes', description: 'Search the household recipe book. The feature must be enabled in Household settings.', inputSchema: { search: z.string().optional() }, annotations: { readOnlyHint: true } },
+    ({ search }) => run(() => listRecipes(search).map((r) => ({ id: r.id, name: r.name, description: r.description || undefined, prep_minutes: r.prep_minutes, tags: r.tags || undefined, ingredients: r.ingredients, instructions: r.instructions }))),
+  );
+  server.registerTool(
+    'add_recipe',
+    {
+      title: 'Add a recipe',
+      description: 'Save a recipe in the household recipe book.',
+      inputSchema: { name: z.string().min(1), description: z.string().optional(), ingredients: z.string().optional(), instructions: z.string().optional(), prep_minutes: z.number().int().min(1).optional(), tags: z.string().optional() },
+    },
+    (input) => run(() => createRecipe(input, actor)),
+  );
+  server.registerTool(
+    'update_recipe',
+    {
+      title: 'Update a recipe',
+      description: 'Change a recipe by id.',
+      inputSchema: { id: z.number().int(), name: z.string().optional(), description: z.string().optional(), ingredients: z.string().optional(), instructions: z.string().optional(), prep_minutes: z.number().int().min(1).nullable().optional(), tags: z.string().optional() },
+    },
+    ({ id, ...patch }) => run(() => updateRecipe(id, patch, actor)),
+  );
+  server.registerTool(
+    'delete_recipe',
+    { title: 'Delete a recipe', description: 'Permanently delete a recipe by id.', inputSchema: { id: z.number().int() }, annotations: { destructiveHint: true } },
+    ({ id }) => run(() => { deleteRecipe(id, actor); return { deleted: id }; }),
+  );
+  server.registerTool(
+    'get_weekly_menu',
+    { title: 'Get weekly menu', description: 'Show planned meals in a date range. Defaults to today through the next seven days.', inputSchema: { from: zDate.optional(), to: zDate.optional() }, annotations: { readOnlyHint: true } },
+    ({ from, to }) => run(() => { const start = from ?? todayIso(); return listMenu(start, to ?? addIsoDays(start, 6)); }),
+  );
+  server.registerTool(
+    'plan_meal',
+    {
+      title: 'Plan a meal',
+      description: 'Set breakfast, lunch, or dinner for a day using a recipe id or a custom meal name.',
+      inputSchema: { date: zDate, meal: z.enum(['breakfast', 'lunch', 'dinner']), recipe_id: z.number().int().positive().nullable().optional(), title: z.string().optional(), notes: z.string().optional() },
+    },
+    ({ date, meal, recipe_id, title, notes }) => run(() => upsertMenuEntry({ meal_date: date, meal_type: meal, recipe_id: recipe_id ?? null, custom_title: title ?? '', notes: notes ?? '' }, actor)),
+  );
+  server.registerTool(
+    'clear_planned_meal',
+    { title: 'Clear planned meal', description: 'Remove a weekly menu entry by id.', inputSchema: { id: z.number().int() }, annotations: { destructiveHint: true } },
+    ({ id }) => run(() => { deleteMenuEntry(id, actor); return { deleted: id }; }),
+  );
+
   return server;
 }
 
-const INSTRUCTIONS = `Lar is a family's household hub: shared to-dos, shopping lists, and home projects.
+const INSTRUCTIONS = `Lar is a family's household hub: shared to-dos, shopping lists, home projects, and an optional recipe book and weekly menu.
 Start with lar_overview to learn the people and groups. Refer to people and projects by name.
 "For" on a to-do or shopping item is who it applies to; empty means everyone in the household.
 Dates are YYYY-MM-DD in the household's local timezone.`;

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor, Lock } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor, Lock, ChevronUp, ChevronDown, Type, ListChecks, Utensils, Baby } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useHousehold, useInvalidatingMutation } from '@/lib/hooks';
-import { usePrefs, setPrefs, applyTheme } from '@/lib/store';
+import { usePrefs, setPrefs, applyTheme, applyTextSize, type CompletionMode, type DashboardSection, type TextSize } from '@/lib/store';
 import { Card, Button, Field, Input, Select, Avatar, IconButton, ColorDots, Chip, Segmented, Empty, PALETTE } from '@/components/ui';
 import { Sheet, Confirm } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
@@ -18,14 +18,16 @@ export function Household() {
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [week, setWeek] = useState<'monday' | 'sunday'>('monday');
+  const [recipesEnabled, setRecipesEnabled] = useState(false);
   useEffect(() => {
     if (data) {
       setName(data.settings.household_name);
       setCurrency(data.settings.currency);
       setWeek(data.settings.week_starts_on);
+      setRecipesEnabled(data.settings.recipes_enabled);
     }
   }, [data]);
-  const saveSettings = useInvalidatingMutation(() => api.updateSettings({ household_name: name.trim() || 'Lar', currency: currency.trim().toUpperCase() || 'USD', week_starts_on: week }), ['household']);
+  const saveSettings = useInvalidatingMutation(() => api.updateSettings({ household_name: name.trim() || 'Lar', currency: currency.trim().toUpperCase() || 'USD', week_starts_on: week, recipes_enabled: recipesEnabled }), ['household']);
 
   const [memberSheet, setMemberSheet] = useState<Member | 'new' | null>(null);
   const [groupSheet, setGroupSheet] = useState<Group | 'new' | null>(null);
@@ -33,8 +35,23 @@ export function Household() {
   const deleteMember = useInvalidatingMutation((id: number) => api.deleteMember(id), ['household', 'tasks', 'shopping', 'projects']);
   const deleteGroup = useInvalidatingMutation((id: number) => api.deleteGroup(id), ['household', 'tasks', 'shopping']);
 
-  const dirty = data && (name !== data.settings.household_name || currency !== data.settings.currency || week !== data.settings.week_starts_on);
+  const dirty = data && (name !== data.settings.household_name || currency !== data.settings.currency || week !== data.settings.week_starts_on || recipesEnabled !== data.settings.recipes_enabled);
   const origin = window.location.origin;
+  const me = data?.members.find((m) => m.id === prefs.memberId);
+  const dashboardLabels: Record<DashboardSection, string> = { todos: 'To-do list', shopping: 'Shopping list', calendar: 'Calendar', menu: 'Weekly menu', projects: 'Projects' };
+  const visibleDashboard = prefs.dashboardOrder.filter((key) => key !== 'menu' || recipesEnabled);
+  const delayUnit = prefs.completionDelaySeconds >= 60 && prefs.completionDelaySeconds % 60 === 0 ? 'minutes' : 'seconds';
+  const delayValue = delayUnit === 'minutes' ? prefs.completionDelaySeconds / 60 : prefs.completionDelaySeconds;
+  const moveDashboard = (key: DashboardSection, direction: -1 | 1) => {
+    const visibleFrom = visibleDashboard.indexOf(key);
+    const neighbour = visibleDashboard[visibleFrom + direction];
+    if (visibleFrom < 0 || !neighbour) return;
+    const next = [...prefs.dashboardOrder];
+    const from = next.indexOf(key);
+    const to = next.indexOf(neighbour);
+    [next[from], next[to]] = [next[to]!, next[from]!];
+    setPrefs({ dashboardOrder: next });
+  };
 
   return (
     <div className="page">
@@ -46,7 +63,7 @@ export function Household() {
       </header>
 
       <div className="grid-2">
-        <Card title="People" icon={UserRound} flush action={<Button size="sm" icon={Plus} onClick={() => setMemberSheet('new')}>Add person</Button>}>
+        <Card title="People" icon={UserRound} flush action={!me?.is_kid ? <Button size="sm" icon={Plus} onClick={() => setMemberSheet('new')}>Add person</Button> : undefined}>
           <div className="list">
             {data?.members.map((m) => (
               <div key={m.id} className="rowitem" onClick={() => setMemberSheet(m)}>
@@ -55,12 +72,13 @@ export function Household() {
                   <div className="title">{m.name}</div>
                   <div className="meta">
                     {m.has_password && <Lock size={12} aria-label="Password protected" />}
+                    {m.is_kid && <span className="row" style={{ gap: 3 }}><Baby size={12} /> Kid</span>}
                     {m.id === prefs.memberId ? 'This device' : data.groups.filter((g) => g.member_ids.includes(m.id)).map((g) => g.name).join(', ')}
                   </div>
                 </div>
                 <div className="side">
                   <IconButton icon={Pencil} label="Edit" onClick={(e) => { e.stopPropagation(); setMemberSheet(m); }} />
-                  <IconButton icon={Trash2} label="Remove" danger onClick={(e) => { e.stopPropagation(); setConfirm({ kind: 'member', id: m.id, name: m.name }); }} />
+                  {!(me?.is_kid && m.id === me.id) && <IconButton icon={Trash2} label="Remove" danger onClick={(e) => { e.stopPropagation(); setConfirm({ kind: 'member', id: m.id, name: m.name }); }} />}
                 </div>
               </div>
             ))}
@@ -118,6 +136,16 @@ export function Household() {
                 ]}
               />
             </Field>
+            <Field label="Recipes & weekly menu" hint="off by default">
+              <Segmented<'off' | 'on'>
+                value={recipesEnabled ? 'on' : 'off'}
+                onChange={(value) => setRecipesEnabled(value === 'on')}
+                options={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'on', label: <span className="row" style={{ gap: 5 }}><Utensils size={14} /> On</span> },
+                ]}
+              />
+            </Field>
             <div className="row">
               <Button variant="primary" disabled={!dirty || saveSettings.isPending} onClick={async () => { await saveSettings.mutateAsync(undefined as never); toast('Settings saved'); }}>Save settings</Button>
             </div>
@@ -142,6 +170,75 @@ export function Household() {
           </div>
         </Card>
       </div>
+
+      <Card title="Display & behaviour" icon={Type}>
+        <div className="settings-columns">
+          <div className="form">
+            <Field label="Text size" hint="this device">
+              <Segmented<TextSize>
+                value={prefs.textSize}
+                onChange={(textSize) => { setPrefs({ textSize }); applyTextSize(textSize); }}
+                options={[
+                  { value: 'standard', label: 'Standard' },
+                  { value: 'large', label: 'Large' },
+                  { value: 'extra-large', label: 'Extra large' },
+                ]}
+              />
+            </Field>
+            <Field label="After checking an item" hint="to-dos and shopping">
+              <Select value={prefs.completionMode} onChange={(e) => setPrefs({ completionMode: e.target.value as CompletionMode })}>
+                <option value="instant">Move it right away</option>
+                <option value="delay">Move it after a delay</option>
+                <option value="screen">Keep it checked until I leave the screen</option>
+              </Select>
+            </Field>
+            {prefs.completionMode === 'delay' && (
+              <div className="form-grid">
+                <Field label="Delay">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={delayUnit === 'minutes' ? 60 : 3600}
+                    inputMode="numeric"
+                    value={delayValue}
+                    onChange={(e) => {
+                      const value = Math.max(1, Number(e.target.value) || 1);
+                      setPrefs({ completionDelaySeconds: delayUnit === 'minutes' ? value * 60 : value });
+                    }}
+                  />
+                </Field>
+                <Field label="Unit">
+                  <Select
+                    value={delayUnit}
+                    onChange={(e) => setPrefs({ completionDelaySeconds: e.target.value === 'minutes' ? Math.max(60, delayValue * 60) : Math.max(1, delayValue) })}
+                  >
+                    <option value="seconds">Seconds</option>
+                    <option value="minutes">Minutes</option>
+                  </Select>
+                </Field>
+              </div>
+            )}
+          </div>
+
+          <div className="form">
+            <div className="field">
+              <span>Today dashboard order <em>this device</em></span>
+              <div className="dashboard-order">
+                {visibleDashboard.map((key, index) => (
+                  <div key={key}>
+                    <ListChecks size={16} className="faint" />
+                    <b>{dashboardLabels[key]}</b>
+                    <div className="right row" style={{ gap: 2 }}>
+                      <IconButton icon={ChevronUp} label={`Move ${dashboardLabels[key]} up`} disabled={index === 0} onClick={() => moveDashboard(key, -1)} />
+                      <IconButton icon={ChevronDown} label={`Move ${dashboardLabels[key]} down`} disabled={index === visibleDashboard.length - 1} onClick={() => moveDashboard(key, 1)} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <InstallAppCard />
       <CalendarsCard />
@@ -176,6 +273,7 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
   const [color, setColor] = useState(PALETTE[0]!);
   const [initials, setInitials] = useState('');
   const [email, setEmail] = useState('');
+  const [isKid, setIsKid] = useState(false);
   const [pwMode, setPwMode] = useState<'closed' | 'set' | 'change' | 'remove'>('closed');
   const [current, setCurrent] = useState('');
   const [pw, setPw] = useState('');
@@ -186,6 +284,7 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
     setColor(member?.color ?? PALETTE[(data?.members.length ?? 0) % PALETTE.length]!);
     setInitials(member?.initials ?? '');
     setEmail(member?.email ?? '');
+    setIsKid(member?.is_kid ?? false);
     setPwMode('closed');
     setCurrent('');
     setPw('');
@@ -194,8 +293,8 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
   const save = useInvalidatingMutation(
     () =>
       member
-        ? api.updateMember(member.id, { name: name.trim(), color, initials: initials.trim() || undefined, email: email.trim() || null })
-        : api.createMember({ name: name.trim(), color, initials: initials.trim() || undefined, email: email.trim() || undefined }),
+        ? api.updateMember(member.id, { name: name.trim(), color, initials: initials.trim() || undefined, email: data?.settings.access_sign_in ? email.trim() || null : undefined, is_kid: isKid })
+        : api.createMember({ name: name.trim(), color, initials: initials.trim() || undefined, email: data?.settings.access_sign_in ? email.trim() || undefined : undefined, is_kid: isKid }),
     ['household'],
   );
   const password = useInvalidatingMutation(async () => {
@@ -209,6 +308,8 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
     if (prefs.memberId === member.id) setPrefs({ unlockToken: r.token });
   }, ['household']);
   const isMe = member?.id === prefs.memberId;
+  const currentActor = data?.members.find((m) => m.id === prefs.memberId);
+  const selfRestricted = Boolean(member?.is_kid && isMe);
 
   return (
     <Sheet open={open} onClose={onClose} title={member ? 'Edit person' : 'Add a person'} footer={<Button variant="primary" className="right" disabled={!name.trim() || save.isPending} onClick={async () => { await save.mutateAsync(undefined as never); toast(member ? 'Saved' : `${name.trim()} added`); onClose(); }}>{member ? 'Save' : 'Add'}</Button>}>
@@ -222,13 +323,30 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
         <Field label="Color">
           <ColorDots value={color} onChange={setColor} />
         </Field>
+        <Field label="Profile type">
+          {currentActor?.is_kid ? (
+            <p className="muted">{isKid ? 'Kid profile' : 'Adult profile'}</p>
+          ) : (
+            <Segmented<'adult' | 'kid'>
+              value={isKid ? 'kid' : 'adult'}
+              onChange={(value) => setIsKid(value === 'kid')}
+              options={[
+                { value: 'adult', label: 'Adult' },
+                { value: 'kid', label: <span className="row" style={{ gap: 5 }}><Baby size={14} /> Kid</span> },
+              ]}
+            />
+          )}
+          {isKid && <p className="faint" style={{ fontSize: 12.5 }}>Kid profiles cannot add people, remove themselves, or manage their own password.</p>}
+        </Field>
         <div className="form-grid">
           <Field label="Initials" hint="optional">
             <Input value={initials} onChange={(e) => setInitials(e.target.value.toUpperCase().slice(0, 3))} maxLength={3} placeholder="Auto" />
           </Field>
-          <Field label="Email" hint={data?.settings.access_sign_in ? 'for automatic sign-in' : 'optional'}>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={120} placeholder="name@example.com" autoComplete="off" />
-          </Field>
+          {data?.settings.access_sign_in && (
+            <Field label="Email" hint="for automatic sign-in">
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={120} placeholder="name@example.com" autoComplete="off" />
+            </Field>
+          )}
         </div>
 
         {member && (
@@ -236,7 +354,7 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
             <div className="row">
               <Lock size={16} className="faint" />
               <b style={{ fontSize: 14 }} className="grow">{member.has_password ? 'Password protected' : 'No password'}</b>
-              {pwMode === 'closed' && (
+              {pwMode === 'closed' && !selfRestricted && (
                 member.has_password ? (
                   <div className="row" style={{ gap: 4 }}>
                     <Button size="sm" onClick={() => setPwMode('change')}>Change</Button>
@@ -248,11 +366,13 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
               )}
             </div>
             <p className="faint" style={{ fontSize: 12.5 }}>
-              {member.has_password
+              {selfRestricted
+                ? 'Kid profiles cannot add or change their own password. An adult can manage it from their profile.'
+                : member.has_password
                 ? 'Devices must enter the password once before acting as this person. Forgot it? On the server run: docker exec lar node dist/server/cli.js reset-password ' + member.name
                 : 'Optional. Without one, anyone in the house can pick this person.'}
             </p>
-            {pwMode !== 'closed' && (
+            {pwMode !== 'closed' && !selfRestricted && (
               <form
                 className="form"
                 style={{ gap: 10 }}

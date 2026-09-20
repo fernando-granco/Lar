@@ -10,6 +10,8 @@ export const backup = Router();
 const TABLES = [
   'settings',
   'members',
+  'recipes',
+  'weekly_menu',
   'groups',
   'group_members',
   'projects',
