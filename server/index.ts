@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dataDir, isDist } from './db.js';
 import { errorMiddleware } from './http.js';
@@ -17,7 +18,24 @@ import { requireUnlock } from './auth.js';
 
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'",
+  );
+  if (req.secure || req.header('x-forwarded-proto') === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
 app.use(express.json({ limit: '1mb' }));
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 // Optional agent key. When LAR_API_KEY is set, every request to /mcp and every
 // /api request that identifies as an agent (X-Lar-Agent) must send the key as
@@ -25,13 +43,25 @@ app.use(express.json({ limit: '1mb' }));
 // open household app, and the key only stops unknown automations on your
 // network from acting as an agent. Keep Lar off the public internet, or put an
 // auth proxy such as Cloudflare Access in front of it.
-const apiKey = process.env.LAR_API_KEY;
+const apiKey = process.env.LAR_API_KEY?.trim();
+if (apiKey && apiKey.length < 32) {
+  throw new Error('LAR_API_KEY must be at least 32 characters. Generate a random key instead of using a memorable password.');
+}
+
+function keyMatches(supplied: string | undefined) {
+  if (!apiKey || !supplied) return false;
+  const expected = crypto.createHash('sha256').update(apiKey).digest();
+  const candidate = crypto.createHash('sha256').update(supplied).digest();
+  return crypto.timingSafeEqual(expected, candidate);
+}
+
 app.use(['/api', '/mcp'], (req, res, next) => {
   if (!apiKey) return next();
   const isAgent = req.path.startsWith('/mcp') || req.baseUrl.startsWith('/mcp') || !!req.header('x-lar-agent');
   if (!isAgent) return next();
-  const supplied = req.header('x-api-key') || req.header('authorization')?.replace(/^Bearer\s+/i, '');
-  if (supplied === apiKey) return next();
+  const authorization = req.header('authorization');
+  const supplied = req.header('x-api-key') || authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (keyMatches(supplied)) return next();
   res.status(401).json({ error: 'A valid agent API key is required (LAR_API_KEY).' });
 });
 
@@ -50,7 +80,17 @@ app.use(errorMiddleware);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.resolve(here, '..', 'client');
 if (isDist && fs.existsSync(path.join(clientDir, 'index.html'))) {
-  app.use(express.static(clientDir, { index: false, maxAge: '1h' }));
+  app.use(
+    express.static(clientDir, {
+      index: false,
+      maxAge: '1h',
+      setHeaders: (res, file) => {
+        // Browsers must revalidate the worker to discover app updates quickly.
+        if (path.basename(file) === 'sw.js') res.setHeader('Cache-Control', 'no-cache');
+        if (path.basename(file) === 'manifest.webmanifest') res.setHeader('Cache-Control', 'no-cache');
+      },
+    }),
+  );
   app.get('*', (_req, res) => res.sendFile(path.join(clientDir, 'index.html')));
 }
 

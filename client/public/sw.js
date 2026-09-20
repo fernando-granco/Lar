@@ -1,8 +1,25 @@
 /* Lar service worker: makes the app installable and keeps the shell loading
    when the network is slow. Data always comes from the server. */
-const VERSION = 'lar-v2';
+const VERSION = 'lar-v3';
+const CORE = ['/', '/today', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png'];
 
-self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches
+      .open(VERSION)
+      .then(async (cache) => {
+        await cache.addAll(CORE);
+        // Vite fingerprints the JS and CSS filenames. Discover and warm those
+        // assets so the first installed launch also works without a connection.
+        const shell = await cache.match('/');
+        if (!shell) return;
+        const html = await shell.text();
+        const assets = [...new Set(html.match(/\/assets\/[A-Za-z0-9._-]+/g) ?? [])];
+        await Promise.all(assets.map((asset) => cache.add(asset)));
+      })
+      .then(() => self.skipWaiting()),
+  );
+});
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches

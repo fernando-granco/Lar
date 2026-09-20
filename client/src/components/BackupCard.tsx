@@ -35,7 +35,7 @@ export function BackupCard() {
     <>
       <Card title="Backup" icon={DatabaseBackup}>
         <p className="muted" style={{ fontSize: 13.5, marginBottom: 12 }}>
-          Everything in Lar fits in one file. Download it now and then, and keep it somewhere safe. Restoring replaces all current data.
+          Everything in Lar fits in one file. It can contain private calendar links and password hashes, so keep it somewhere safe. Device unlock tokens are never exported. Restoring replaces all current data.
         </p>
         <div className="row wrap">
           <a className="btn btn-secondary" href="/api/v1/backup" download>

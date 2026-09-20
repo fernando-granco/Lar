@@ -44,8 +44,14 @@ export function revokeUnlocks(memberId: number) {
 
 function unlockValid(token: string | undefined, memberId: number): boolean {
   if (!token) return false;
-  const row = db.prepare('SELECT member_id FROM unlocks WHERE token = ?').get(token) as { member_id: number } | undefined;
+  const row = db.prepare('SELECT member_id, last_seen_at FROM unlocks WHERE token = ?').get(token) as { member_id: number; last_seen_at: string } | undefined;
   if (!row || row.member_id !== memberId) return false;
+  // A forgotten device should not stay authorized forever. Active devices
+  // renew this rolling window every time they use Lar.
+  if (Date.now() - Date.parse(row.last_seen_at) > 180 * 24 * 3600_000) {
+    db.prepare('DELETE FROM unlocks WHERE token = ?').run(token);
+    return false;
+  }
   db.prepare('UPDATE unlocks SET last_seen_at = ? WHERE token = ?').run(nowIso(), token);
   return true;
 }

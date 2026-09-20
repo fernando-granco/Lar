@@ -8,15 +8,34 @@ import { hashPassword, verifyPassword, issueUnlock, revokeUnlocks, cfAccessEmail
 
 export const auth = Router();
 
+const unlockAttempts = new Map<string, { failures: number; resetAt: number }>();
+const ATTEMPT_WINDOW = 15 * 60_000;
+const MAX_ATTEMPTS = 5;
+
+function unlockKey(req: import('express').Request, memberId: number) {
+  return `${req.ip}:${memberId}`;
+}
+
 /** Unlock a protected person on this device. Returns a token to send as X-Lar-Unlock. */
 auth.post(
   '/auth/unlock',
   handler((req) => {
     const body = parse(z.object({ member_id: z.number().int().positive(), password: z.string().max(200) }), req.body);
+    const key = unlockKey(req, body.member_id);
+    const attempt = unlockAttempts.get(key);
+    if (attempt && attempt.resetAt > Date.now() && attempt.failures >= MAX_ATTEMPTS) {
+      throw new HttpError(429, 'Too many password attempts. Try again in 15 minutes.');
+    }
+    if (attempt && attempt.resetAt <= Date.now()) unlockAttempts.delete(key);
     const row = db.prepare('SELECT id, password_hash FROM members WHERE id = ?').get(body.member_id) as { id: number; password_hash: string | null } | undefined;
     if (!row) throw notFound('Member not found');
     if (!row.password_hash) return { token: null, member: getMember(row.id) };
-    if (!verifyPassword(body.password, row.password_hash)) throw new HttpError(401, 'Wrong password.');
+    if (!verifyPassword(body.password, row.password_hash)) {
+      const current = unlockAttempts.get(key);
+      unlockAttempts.set(key, { failures: (current?.failures ?? 0) + 1, resetAt: current?.resetAt ?? Date.now() + ATTEMPT_WINDOW });
+      throw new HttpError(401, 'Wrong password.');
+    }
+    unlockAttempts.delete(key);
     return { token: issueUnlock(row.id), member: getMember(row.id) };
   }),
 );

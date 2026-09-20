@@ -9,6 +9,7 @@ import { useToast } from '@/components/Toast';
 import type { Member, Group } from '@shared/types';
 import { CalendarsCard } from '@/components/CalendarsCard';
 import { BackupCard } from '@/components/BackupCard';
+import { InstallAppCard } from '@/components/InstallAppCard';
 
 export function Household() {
   const { data } = useHousehold();
@@ -138,16 +139,11 @@ export function Household() {
               <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>Everything the app does is available as JSON. Open the address for a map of all routes.</p>
               <code className="mono" style={{ display: 'block', marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 8, wordBreak: 'break-all' }}>{origin}/api/v1</code>
             </div>
-            <div>
-              <b style={{ fontSize: 14 }}>Install on your phone</b>
-              <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
-                Open this address in Safari or Chrome on your phone and choose “Add to Home Screen”. Lar then opens like an app.
-              </p>
-            </div>
           </div>
         </Card>
       </div>
 
+      <InstallAppCard />
       <CalendarsCard />
       <BackupCard />
 

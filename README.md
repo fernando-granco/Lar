@@ -25,6 +25,15 @@ docker compose up -d --build
 
 Open `http://YOUR-SERVER-IP:3001` from any device on your network. The first visit asks for your household name and the people in it. Each device then remembers who is using it, no passwords involved.
 
+### Install it like an app
+
+Installation requires the HTTPS address for your Lar instance (for example `https://lar.example.com`); browsers do not offer full PWA installation from a plain LAN IP address.
+
+- **iPhone/iPad:** open Lar, tap **Share**, choose **Add to Home Screen**, then tap **Add**.
+- **Android:** open Lar in Chrome or Samsung Internet and use Lar's **Household → Install Lar** button. You can also choose **Install app** or **Add to Home screen** from the browser menu.
+
+Lar then has its own icon, launches in a standalone window, respects safe areas, and keeps the app shell available if the network briefly drops. Household data still comes from your server.
+
 Your data lives in the `lar-data` Docker volume as a single SQLite file.
 
 **Update** with `git pull && docker compose up -d --build`. Database migrations run automatically on start.
@@ -74,6 +83,8 @@ curl -X POST http://YOUR-SERVER-IP:3001/api/v1/shopping/items \
 Lar is an MCP server. Point any Model Context Protocol client at `http://YOUR-SERVER-IP:3001/mcp` (Streamable HTTP, stateless) and it gets tools such as `lar_overview`, `list_todos`, `add_todo`, `complete_todo`, `add_shopping_items`, `check_shopping_items`, `list_projects`, `get_project`, `add_milestone`, and `add_expense`. Tools take people and projects by name, so "add oat milk for Fernando" just works.
 
 Send `X-Lar-Agent: <name>` so the activity log says who did it. If `LAR_API_KEY` is set, also send `Authorization: Bearer <key>`.
+
+Use a random key of at least 32 characters; do not use a memorable password or commit the key to Git. One way to generate one on the server is `openssl rand -hex 32`. Lar refuses to start with a shorter configured key. `GET /api/v1/health` reports `agent_api_protected: true` when protection is active without revealing the key.
 
 Claude Code:
 

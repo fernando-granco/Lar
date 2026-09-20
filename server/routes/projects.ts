@@ -336,7 +336,7 @@ projects.delete(
 
 const linkBody = z.object({
   label: z.string().trim().min(1).max(120),
-  url: z.string().trim().url().max(2000),
+  url: z.string().trim().url().max(2000).refine((url) => /^https?:\/\//i.test(url), 'Only http(s) links are allowed'),
 });
 
 const getLink = (id: number) => db.prepare('SELECT * FROM project_links WHERE id = ?').get(id) as ProjectLink | undefined;

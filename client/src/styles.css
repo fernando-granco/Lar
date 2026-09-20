@@ -1457,6 +1457,40 @@ ul {
 }
 
 /* ---------- Toast ---------- */
+.install-state {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.install-state > svg {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+.install-state > svg.success {
+  color: var(--success);
+}
+.install-state b {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 3px;
+}
+.install-state p {
+  font-size: 13.5px;
+}
+@media (max-width: 560px) {
+  .install-state {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .install-state .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ---------- Toast ---------- */
 .toast-host {
   position: fixed;
   left: 50%;

@@ -56,4 +56,12 @@ misc.get(
 
 misc.get('/events', (_req, res) => subscribe(res));
 
-misc.get('/health', handler(() => ({ ok: true, clients: clientCount(), time: new Date().toISOString() })));
+misc.get(
+  '/health',
+  handler(() => ({
+    ok: true,
+    clients: clientCount(),
+    agent_api_protected: Boolean(process.env.LAR_API_KEY?.trim()),
+    time: new Date().toISOString(),
+  })),
+);

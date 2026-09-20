@@ -29,7 +29,9 @@ const TABLES = [
 
 export function exportAll() {
   const tables: Record<string, unknown[]> = {};
-  for (const t of TABLES) tables[t] = db.prepare(`SELECT * FROM ${t}`).all();
+  // Unlock tokens authorize individual devices. They should never be portable
+  // to another installation or copied into an archive.
+  for (const t of TABLES) tables[t] = t === 'unlocks' ? [] : db.prepare(`SELECT * FROM ${t}`).all();
   return { app: 'lar', version: 1, exported_at: new Date().toISOString(), tables };
 }
 
@@ -54,7 +56,7 @@ backup.post(
       try {
         for (const t of [...TABLES].reverse()) db.prepare(`DELETE FROM ${t}`).run();
         for (const t of TABLES) {
-          const rows = (data.tables![t] ?? []) as Record<string, unknown>[];
+          const rows = (t === 'unlocks' ? [] : data.tables![t] ?? []) as Record<string, unknown>[];
           const allowed = new Set((db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name));
           let n = 0;
           for (const row of rows) {
