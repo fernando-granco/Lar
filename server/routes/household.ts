@@ -13,11 +13,13 @@ export function loadHousehold(accessSignIn = false): Household {
   return {
     settings: {
       household_name: getSetting('household_name', 'Lar'),
+      app_name: getSetting('app_name', 'Lar'),
+      app_tagline: getSetting('app_tagline', "The family's home hub"),
       currency: getSetting('currency', 'USD'),
       week_starts_on: (getSetting('week_starts_on', 'monday') as 'monday' | 'sunday') || 'monday',
       allow_private_calendar_urls: getSetting('allow_private_calendar_urls', '0') === '1',
       access_sign_in: accessSignIn,
-      recipes_enabled: getSetting('recipes_enabled', '0') === '1',
+      recipes_enabled: true,
     },
     members: listMembers(),
     groups: listGroups(),
@@ -32,10 +34,11 @@ household.patch(
     const body = parse(
       z.object({
         household_name: z.string().trim().min(1).max(60).optional(),
+        app_name: z.string().trim().min(1).max(40).optional(),
+        app_tagline: z.string().trim().max(100).optional(),
         currency: z.string().trim().length(3).toUpperCase().optional(),
         week_starts_on: z.enum(['monday', 'sunday']).optional(),
         allow_private_calendar_urls: z.boolean().optional(),
-        recipes_enabled: z.boolean().optional(),
       }),
       req.body,
     );
@@ -52,6 +55,7 @@ const memberBody = z.object({
   color: zColor.optional(),
   initials: z.string().trim().max(3).optional(),
   email: z.string().trim().toLowerCase().email().max(120).nullable().optional(),
+  avatar_url: z.string().trim().max(1_500_000).refine((value) => !value || /^https:\/\//i.test(value) || /^data:image\/(png|jpeg|webp);base64,/i.test(value), 'Use an HTTPS image URL or a PNG, JPEG, or WebP image.').optional(),
   is_kid: z.boolean().optional(),
 });
 
@@ -77,8 +81,8 @@ household.post(
     const body = parse(memberBody, req.body);
     const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM members').get() as any).n;
     const result = db
-      .prepare('INSERT INTO members (name, color, initials, sort_order, email, is_kid) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(body.name, body.color ?? pickColor(order), body.initials || initialsFor(body.name), order, body.email || null, body.is_kid ? 1 : 0);
+      .prepare('INSERT INTO members (name, color, initials, sort_order, email, is_kid, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(body.name, body.color ?? pickColor(order), body.initials || initialsFor(body.name), order, body.email || null, body.is_kid ? 1 : 0, body.avatar_url ?? '');
     const member = getMember(Number(result.lastInsertRowid))!;
     logChange(actorFrom(req), 'created', 'household', member.id, `Added ${member.name} to the household`);
     res.status(201);
@@ -95,7 +99,7 @@ household.patch(
     const body = onlySupplied(req.body, parse(memberBody.partial().extend({ archived: z.boolean().optional(), sort_order: z.number().int().optional() }), req.body));
     const kid = kidActor(req);
     if (kid && body.is_kid !== undefined && body.is_kid !== current.is_kid) throw new HttpError(403, 'Kid profiles cannot change family permission levels.');
-    db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ?, email = ?, is_kid = ? WHERE id = ?').run(
+    db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ?, email = ?, is_kid = ?, avatar_url = ? WHERE id = ?').run(
       body.name ?? current.name,
       body.color ?? current.color,
       body.initials ?? (body.name ? initialsFor(body.name) : current.initials),
@@ -103,6 +107,7 @@ household.patch(
       body.sort_order ?? current.sort_order,
       body.email === undefined ? current.email : body.email || null,
       body.is_kid === undefined ? (current.is_kid ? 1 : 0) : body.is_kid ? 1 : 0,
+      body.avatar_url === undefined ? current.avatar_url : body.avatar_url,
       id,
     );
     const member = getMember(id)!;

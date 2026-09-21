@@ -21,8 +21,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const { data: summary } = useSummary();
   const me = useCurrentMember();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const name = household?.settings.household_name || 'Lar';
-  const nav = household?.settings.recipes_enabled ? [...NAV, { to: '/recipes', label: 'Recipes', icon: Soup, key: '' } as const] : NAV;
+  const name = household?.settings.app_name || household?.settings.household_name || 'Lar';
+  const tagline = household?.settings.app_tagline || "The family's home hub";
+  const nav = [...NAV, { to: '/recipes', label: 'Recipes', icon: Soup, key: '' } as const];
 
   return (
     <div className="app">
@@ -31,7 +32,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <BrandMark />
           <span>
             {name}
-            <small>{name !== 'Lar' ? 'Lar' : "The family's home hub"}</small>
+            <small>{tagline}</small>
           </span>
         </Link>
         {nav.map((n) => (

@@ -6,7 +6,8 @@ import { useSyncExternalStore } from 'react';
  */
 export type DashboardSection = 'todos' | 'shopping' | 'calendar' | 'menu' | 'projects';
 export type CompletionMode = 'instant' | 'delay' | 'screen';
-export type TextSize = 'standard' | 'large' | 'extra-large';
+export type TextSize = 'standard' | 'large' | 'extra-large' | 'huge';
+export type Palette = 'classic' | 'ocean' | 'berry' | 'sunset';
 export type ProjectOverviewSection = 'details' | 'milestones' | 'todos' | 'shopping' | 'budget' | 'notes';
 export type ProjectOverviewWidth = 'half' | 'full';
 export type ProjectOverviewDensity = 'compact' | 'comfortable';
@@ -16,6 +17,9 @@ type Prefs = {
   /** Token proving this device unlocked a password-protected person. */
   unlockToken: string | null;
   theme: 'system' | 'light' | 'dark';
+  palette: Palette;
+  largeTargets: boolean;
+  notificationsEnabled: boolean;
   view: 'mine' | 'everyone';
   projectsView: 'mine' | 'everyone';
   dashboardOrder: DashboardSection[];
@@ -36,10 +40,13 @@ const DEFAULTS: Prefs = {
   memberId: null,
   unlockToken: null,
   theme: 'system',
+  palette: 'classic',
+  largeTargets: false,
+  notificationsEnabled: false,
   view: 'everyone',
   projectsView: 'mine',
   dashboardOrder: ['todos', 'shopping', 'calendar', 'menu', 'projects'],
-  dashboardHidden: [],
+  dashboardHidden: ['menu'],
   textSize: 'standard',
   completionMode: 'screen',
   completionDelaySeconds: 10,
@@ -65,6 +72,9 @@ function read(): Prefs {
         return [key, width === 'half' || width === 'full' ? width : DEFAULTS.projectOverviewWidths[key]];
       })) as Record<ProjectOverviewSection, ProjectOverviewWidth>;
       parsed.projectOverviewDensity = parsed.projectOverviewDensity === 'compact' ? 'compact' : 'comfortable';
+      parsed.palette = ['classic', 'ocean', 'berry', 'sunset'].includes(parsed.palette) ? parsed.palette : 'classic';
+      parsed.largeTargets = Boolean(parsed.largeTargets);
+      parsed.notificationsEnabled = Boolean(parsed.notificationsEnabled);
       parsed.completionDelaySeconds = Math.min(3600, Math.max(1, Number(parsed.completionDelaySeconds) || 10));
       return parsed;
     }
@@ -109,7 +119,17 @@ export function applyTheme(theme: Prefs['theme']) {
 }
 applyTheme(state.theme);
 
+export function applyPalette(palette: Palette) {
+  document.documentElement.setAttribute('data-palette', palette);
+}
+applyPalette(state.palette);
+
 export function applyTextSize(size: TextSize) {
   document.documentElement.setAttribute('data-text-size', size);
 }
 applyTextSize(state.textSize);
+
+export function applyLargeTargets(enabled: boolean) {
+  document.documentElement.toggleAttribute('data-large-targets', enabled);
+}
+applyLargeTargets(state.largeTargets);

@@ -22,6 +22,8 @@ export interface Member {
   archived: boolean;
   email: string | null;
   is_kid: boolean;
+  /** Optional image stored locally as a small data URL or a public image URL. */
+  avatar_url: string;
   /** True when this person set a profile password. Devices must unlock them once. */
   has_password: boolean;
 }
@@ -36,13 +38,15 @@ export interface Group {
 
 export interface Settings {
   household_name: string;
+  app_name: string;
+  app_tagline: string;
   currency: string;
   week_starts_on: 'monday' | 'sunday';
   /** Let the server fetch calendars on private network addresses (e.g. a local Nextcloud). */
   allow_private_calendar_urls: boolean;
   /** True when Cloudflare Access sign-in is configured on the server. */
   access_sign_in: boolean;
-  /** Recipes and the weekly menu are hidden until the household enables them. */
+  /** Kept for compatibility with older Lar backups; recipes are now always available. */
   recipes_enabled: boolean;
 }
 
@@ -211,10 +215,21 @@ export interface Recipe {
   ingredients: string;
   instructions: string;
   prep_minutes: number | null;
+  servings: number | null;
+  source: string;
+  image_url: string;
+  /** Structured ingredient rows. The legacy ingredients field is kept for imports/backward compatibility. */
+  ingredient_rows: RecipeIngredient[];
   tags: string;
   created_by: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface RecipeIngredient {
+  quantity: string;
+  unit: string;
+  ingredient: string;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
@@ -230,6 +245,18 @@ export interface MenuEntry {
   created_by: number | null;
   created_at: string;
   updated_at: string;
+  rule_id?: number | null;
+  from_rule?: boolean;
+}
+
+export interface MenuRule {
+  id: number;
+  recipe_id: number;
+  meal_type: MealType;
+  start_date: string;
+  recurrence: Recurrence;
+  created_by: number | null;
+  created_at: string;
 }
 
 export interface Calendar {

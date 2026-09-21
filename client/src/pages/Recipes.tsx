@@ -1,24 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Clock, Plus, Search, Soup, Trash2, Utensils } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight, Clock, ExternalLink, ListPlus, Pencil, Plus, Search, Soup, Trash2, Users, Utensils } from 'lucide-react';
 import { api } from '@/lib/api';
 import { keys, useHousehold, useInvalidatingMutation } from '@/lib/hooks';
 import { addDays, friendlyDate, today } from '@/lib/format';
-import { Button, Card, Empty, Field, Input, Select, TextArea } from '@/components/ui';
+import { Button, Card, Empty, Field, IconButton, Input, Select, TextArea } from '@/components/ui';
 import { Confirm, Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
-import type { MealType, Recipe } from '@shared/types';
+import type { MealType, MenuRule, Recipe, RecipeIngredient } from '@shared/types';
 
-const MEALS: { value: MealType; label: string }[] = [
-  { value: 'breakfast', label: 'Breakfast' },
-  { value: 'lunch', label: 'Lunch' },
-  { value: 'dinner', label: 'Dinner' },
-];
+const MEALS: { value: MealType; label: string }[] = [{ value: 'breakfast', label: 'Breakfast' }, { value: 'lunch', label: 'Lunch' }, { value: 'dinner', label: 'Dinner' }];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function Recipes() {
   const { data: household } = useHousehold();
   const [weekOffset, setWeekOffset] = useState(0);
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<Recipe | null>(null);
   const [edit, setEdit] = useState<Recipe | 'new' | null>(null);
   const weekStart = startOfWeek(addDays(today(), weekOffset * 7), household?.settings.week_starts_on ?? 'monday');
   const weekEnd = addDays(weekStart, 6);
@@ -26,155 +24,41 @@ export function Recipes() {
   const menuQ = useQuery({ queryKey: keys.menu({ from: weekStart, to: weekEnd }), queryFn: () => api.menu(weekStart, weekEnd) });
   const setMeal = useInvalidatingMutation(async ({ date, type, recipeId }: { date: string; type: MealType; recipeId: number | null }) => {
     const existing = menuQ.data?.find((m) => m.meal_date === date && m.meal_type === type);
-    if (!recipeId) {
-      if (existing) await api.deleteMenuEntry(existing.id);
-      return;
-    }
+    if (!recipeId) { if (existing && !existing.from_rule) await api.deleteMenuEntry(existing.id); return; }
     await api.setMenuEntry({ meal_date: date, meal_type: type, recipe_id: recipeId });
   }, ['menu']);
-
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  const filteredRecipes = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return recipesQ.data ?? [];
-    return (recipesQ.data ?? []).filter((recipe) => `${recipe.name} ${recipe.description} ${recipe.tags}`.toLowerCase().includes(needle));
-  }, [recipesQ.data, search]);
-
-  return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>Recipes & menu</h1>
-          <p className="sub">Keep family favourites and make the week visible to everyone.</p>
-        </div>
-        <Button variant="primary" icon={Plus} onClick={() => setEdit('new')}>Add recipe</Button>
-      </header>
-
-      <Card
-        title="Weekly menu"
-        icon={Utensils}
-        action={
-          <div className="row" style={{ gap: 4 }}>
-            <Button size="sm" variant="ghost" icon={ChevronLeft} aria-label="Previous week" onClick={() => setWeekOffset((n) => n - 1)} />
-            <Button size="sm" variant="ghost" onClick={() => setWeekOffset(0)}>{weekOffset === 0 ? 'This week' : `${friendlyDate(weekStart)} – ${friendlyDate(weekEnd)}`}</Button>
-            <Button size="sm" variant="ghost" icon={ChevronRight} aria-label="Next week" onClick={() => setWeekOffset((n) => n + 1)} />
-          </div>
-        }
-      >
-        <div className="menu-week">
-          {days.map((date) => (
-            <section key={date} className={date === today() ? 'today' : ''}>
-              <header><b>{new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })}</b><span>{friendlyDate(date)}</span></header>
-              {MEALS.map((meal) => {
-                const entry = menuQ.data?.find((m) => m.meal_date === date && m.meal_type === meal.value);
-                return (
-                  <label key={meal.value}>
-                    <span>{meal.label}</span>
-                    <Select
-                      aria-label={`${meal.label} on ${friendlyDate(date)}`}
-                      value={entry?.recipe_id ?? (entry ? `custom:${entry.id}` : '')}
-                      onChange={(e) => setMeal.mutate({ date, type: meal.value, recipeId: e.target.value ? Number(e.target.value) : null })}
-                    >
-                      <option value="">Not planned</option>
-                      {entry && !entry.recipe_id && <option value={`custom:${entry.id}`}>{entry.custom_title}</option>}
-                      {(recipesQ.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                    </Select>
-                  </label>
-                );
-              })}
-            </section>
-          ))}
-        </div>
-      </Card>
-
-      <div className="row wrap">
-        <div className="quick-add grow">
-          <Search />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search recipes…" aria-label="Search recipes" />
-        </div>
-      </div>
-
-      {filteredRecipes.length ? (
-        <div className="recipe-grid">
-          {filteredRecipes.map((recipe) => (
-            <button type="button" key={recipe.id} className="card recipe-card" onClick={() => setEdit(recipe)}>
-              <span className="icon-badge"><Soup /></span>
-              <div>
-                <h2>{recipe.name}</h2>
-                {recipe.description && <p>{recipe.description}</p>}
-              </div>
-              <div className="meta">
-                {recipe.prep_minutes && <span><Clock /> {recipe.prep_minutes} min</span>}
-                {recipe.tags && <span>{recipe.tags}</span>}
-              </div>
-            </button>
-          ))}
-        </div>
-      ) : recipesQ.isLoading ? null : (
-        <Card><Empty icon={Soup} title={search ? 'No recipes found' : 'No recipes yet'} hint={search ? 'Try a different search.' : 'Add the first family favourite.'} /></Card>
-      )}
-
-      <RecipeSheet open={edit !== null} recipe={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />
-    </div>
-  );
+  const filtered = useMemo(() => { const needle = search.trim().toLowerCase(); return (recipesQ.data ?? []).filter((recipe) => !needle || `${recipe.name} ${recipe.description} ${recipe.tags}`.toLowerCase().includes(needle)); }, [recipesQ.data, search]);
+  return <div className="page">
+    <header className="page-head compact-mobile-head"><div><h1>Recipes & menu</h1><p className="sub">Family favourites, easy to read and ready for the week.</p></div><Button variant="primary" icon={Plus} onClick={() => setEdit('new')}>Add recipe</Button></header>
+    <Card title="Weekly menu" icon={Utensils} action={<div className="row" style={{ gap: 4 }}><Button size="sm" variant="ghost" icon={ChevronLeft} aria-label="Previous week" onClick={() => setWeekOffset((n) => n - 1)} /><Button size="sm" variant="ghost" onClick={() => setWeekOffset(0)}>{weekOffset === 0 ? 'This week' : `${friendlyDate(weekStart)} – ${friendlyDate(weekEnd)}`}</Button><Button size="sm" variant="ghost" icon={ChevronRight} aria-label="Next week" onClick={() => setWeekOffset((n) => n + 1)} /></div>}>
+      <div className="menu-week">{days.map((date) => <section key={date} className={date === today() ? 'today' : ''}><header><b>{new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })}</b><span>{friendlyDate(date)}</span></header>{MEALS.map((meal) => { const entry = menuQ.data?.find((m) => m.meal_date === date && m.meal_type === meal.value); return <label key={meal.value}><span>{meal.label}{entry?.from_rule && <em> repeats</em>}</span><Select aria-label={`${meal.label} on ${friendlyDate(date)}`} value={entry?.recipe_id ?? ''} onChange={(event) => setMeal.mutate({ date, type: meal.value, recipeId: event.target.value ? Number(event.target.value) : null })}><option value="">Not planned</option>{(recipesQ.data ?? []).map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}</Select></label>; })}</section>)}</div>
+    </Card>
+    <div className="quick-add"><Search /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search recipes…" aria-label="Search recipes" /></div>
+    {filtered.length ? <div className="recipe-grid">{filtered.map((recipe) => <button type="button" key={recipe.id} className="card recipe-card" onClick={() => setView(recipe)}>{recipe.image_url ? <img className="recipe-photo" src={recipe.image_url} alt="" /> : <span className="icon-badge"><Soup /></span>}<div><h2>{recipe.name}</h2>{recipe.description && <p>{recipe.description}</p>}</div><div className="meta">{recipe.prep_minutes && <span><Clock /> {recipe.prep_minutes} min</span>}{recipe.servings && <span><Users /> {recipe.servings}</span>}{recipe.tags && <span>{recipe.tags}</span>}</div></button>)}</div> : recipesQ.isLoading ? null : <Card><Empty icon={Soup} title={search ? 'No recipes found' : 'No recipes yet'} hint={search ? 'Try a different search.' : 'Add the first family favourite.'} /></Card>}
+    <RecipeView open={view !== null} recipe={view} onClose={() => setView(null)} onEdit={() => { if (view) setEdit(view); setView(null); }} />
+    <RecipeEditor open={edit !== null} recipe={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />
+  </div>;
 }
 
-function RecipeSheet({ open, recipe, onClose }: { open: boolean; recipe: Recipe | null; onClose: () => void }) {
-  const toast = useToast();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [ingredients, setIngredients] = useState('');
-  const [instructions, setInstructions] = useState('');
-  const [minutes, setMinutes] = useState<number | null>(null);
-  const [tags, setTags] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    setName(recipe?.name ?? '');
-    setDescription(recipe?.description ?? '');
-    setIngredients(recipe?.ingredients ?? '');
-    setInstructions(recipe?.instructions ?? '');
-    setMinutes(recipe?.prep_minutes ?? null);
-    setTags(recipe?.tags ?? '');
-  }, [open, recipe]);
-  const save = useInvalidatingMutation(() => {
-    const body = { name: name.trim(), description, ingredients, instructions, prep_minutes: minutes, tags };
-    return recipe ? api.updateRecipe(recipe.id, body) : api.createRecipe(body);
-  }, ['recipes']);
-  const remove = useInvalidatingMutation(() => api.deleteRecipe(recipe!.id), ['recipes', 'menu']);
-  return (
-    <>
-      <Sheet
-        open={open}
-        onClose={onClose}
-        title={recipe ? 'Edit recipe' : 'New recipe'}
-        wide
-        footer={
-          <>
-            {recipe && <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(true)}>Delete</Button>}
-            <Button variant="primary" className="right" type="submit" form="recipe-form" disabled={!name.trim() || save.isPending}>Save recipe</Button>
-          </>
-        }
-      >
-        <form id="recipe-form" className="form" onSubmit={async (e) => { e.preventDefault(); await save.mutateAsync(undefined as never); toast(recipe ? 'Recipe saved' : 'Recipe added'); onClose(); }}>
-          <Field label="Recipe name"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="e.g. Sunday lasagna" /></Field>
-          <Field label="Short description" hint="optional"><Input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} placeholder="Why the family loves it" /></Field>
-          <Field label="Ingredients" hint="one per line"><TextArea value={ingredients} onChange={(e) => setIngredients(e.target.value)} style={{ minHeight: 140 }} placeholder={'500 g pasta\n2 cups tomato sauce\n…'} /></Field>
-          <Field label="Instructions"><TextArea value={instructions} onChange={(e) => setInstructions(e.target.value)} style={{ minHeight: 170 }} placeholder={'1. Prepare…\n2. Cook…'} /></Field>
-          <div className="form-grid">
-            <Field label="Time" hint="minutes"><Input type="number" min={1} max={1440} inputMode="numeric" value={minutes ?? ''} onChange={(e) => setMinutes(e.target.value ? Number(e.target.value) : null)} /></Field>
-            <Field label="Tags" hint="comma separated"><Input value={tags} onChange={(e) => setTags(e.target.value)} maxLength={300} placeholder="quick, vegetarian, favourite" /></Field>
-          </div>
-        </form>
-      </Sheet>
-      <Confirm open={confirmDelete} onClose={() => setConfirmDelete(false)} title={`Delete "${recipe?.name}"?`} body="It will also be removed from future menu slots." onConfirm={async () => { await remove.mutateAsync(undefined as never); toast('Recipe deleted'); onClose(); }} />
-    </>
-  );
+function RecipeView({ open, recipe, onClose, onEdit }: { open: boolean; recipe: Recipe | null; onClose: () => void; onEdit: () => void }) {
+  const toast = useToast(); const rulesQ = useQuery({ queryKey: keys.menuRules(recipe?.id ?? 0), queryFn: () => api.menuRules(recipe!.id), enabled: !!recipe && open }); const [schedule, setSchedule] = useState(false);
+  const addIngredients = useInvalidatingMutation(async () => { if (!recipe) return; for (const row of recipe.ingredient_rows) await api.createShoppingItem({ list_id: 1, name: row.ingredient, quantity: numberOrNull(row.quantity), unit: row.unit }); }, ['shopping', 'summary']);
+  return <><Sheet open={open} onClose={onClose} title={recipe?.name ?? 'Recipe'} wide footer={<><Button variant="secondary" icon={CalendarClock} onClick={() => setSchedule(true)}>Schedule</Button><Button variant="secondary" icon={ListPlus} onClick={async () => { await addIngredients.mutateAsync(undefined as never); toast('Ingredients added to shopping'); }} disabled={!recipe?.ingredient_rows.length || addIngredients.isPending}>Shopping list</Button><Button variant="primary" className="right" icon={Pencil} onClick={onEdit}>Edit recipe</Button></>}>
+    {recipe && <article className="recipe-view">{recipe.image_url && <img className="recipe-hero" src={recipe.image_url} alt="" />}<p className="recipe-description">{recipe.description}</p><div className="recipe-facts">{recipe.servings && <span><Users /> Serves {recipe.servings}</span>}{recipe.prep_minutes && <span><Clock /> {recipe.prep_minutes} min</span>}{recipe.source && <a href={recipe.source.startsWith('http') ? recipe.source : undefined} target="_blank" rel="noreferrer"><ExternalLink /> {recipe.source.startsWith('http') ? 'Source' : recipe.source}</a>}</div><section><h3>Ingredients</h3>{recipe.ingredient_rows.length ? <ul className="ingredient-list">{recipe.ingredient_rows.map((row, index) => <li key={index}><b>{[row.quantity, row.unit].filter(Boolean).join(' ')}</b><span>{row.ingredient}</span></li>)}</ul> : <p className="muted">No ingredients added yet.</p>}</section><section><h3>Directions</h3><div className="recipe-directions">{recipe.instructions.split('\n').filter(Boolean).map((line, index) => <p key={index}><b>{index + 1}.</b> {line.replace(/^\d+[.)]\s*/, '')}</p>)}</div></section>{recipe.tags && <p className="recipe-tags">{recipe.tags}</p>}<section><h3>Repeats</h3>{rulesQ.data?.length ? <div className="stack">{rulesQ.data.map((rule) => <RuleLine key={rule.id} rule={rule} />)}</div> : <p className="muted">Not scheduled to repeat.</p>}</section></article>}
+  </Sheet><ScheduleSheet open={schedule} recipe={recipe} onClose={() => setSchedule(false)} /></>;
 }
 
-function startOfWeek(date: string, starts: 'monday' | 'sunday') {
-  const d = new Date(`${date}T12:00:00`);
-  const day = d.getDay();
-  const delta = starts === 'monday' ? (day + 6) % 7 : day;
-  return addDays(date, -delta);
+function RuleLine({ rule }: { rule: MenuRule }) { const remove = useInvalidatingMutation(() => api.deleteMenuRule(rule.id), ['menu', 'menu-rules']); return <div className="rowitem"><CalendarClock size={16} className="faint" /><div className="body"><b>{describeRule(rule)}</b><span className="meta">Starting {friendlyDate(rule.start_date, { relative: false })}</span></div><Button size="sm" variant="ghost" onClick={() => remove.mutate(undefined as never)}>Remove</Button></div>; }
+function ScheduleSheet({ open, recipe, onClose }: { open: boolean; recipe: Recipe | null; onClose: () => void }) { const toast = useToast(); const [meal, setMeal] = useState<MealType>('dinner'); const [start, setStart] = useState(today()); const [freq, setFreq] = useState<'daily' | 'weekly'>('weekly'); const [interval, setInterval] = useState(1); const [days, setDays] = useState<number[]>([new Date(`${today()}T12:00:00`).getDay()]); const save = useInvalidatingMutation(() => api.createMenuRule({ recipe_id: recipe!.id, meal_type: meal, start_date: start, recurrence: { freq, interval, weekdays: freq === 'weekly' ? days : undefined } }), ['menu', 'menu-rules']); return <Sheet open={open} onClose={onClose} title={`Repeat ${recipe?.name ?? 'recipe'}`} footer={<Button variant="primary" className="right" disabled={!recipe || (freq === 'weekly' && !days.length) || save.isPending} onClick={async () => { await save.mutateAsync(undefined as never); toast('Meal schedule saved'); onClose(); }}>Save schedule</Button>}><div className="form"><div className="form-grid"><Field label="Meal"><Select value={meal} onChange={(e) => setMeal(e.target.value as MealType)}>{MEALS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</Select></Field><Field label="Starts"><Input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></Field></div><div className="form-grid"><Field label="Repeats"><Select value={freq} onChange={(e) => setFreq(e.target.value as 'daily' | 'weekly')}><option value="weekly">Weekly</option><option value="daily">Every few days</option></Select></Field><Field label="Every"><Input type="number" min={1} max={365} value={interval} onChange={(e) => setInterval(Math.max(1, Number(e.target.value) || 1))} /></Field></div>{freq === 'weekly' && <Field label="On"><div className="chip-row">{WEEKDAYS.map((day, index) => <button key={day} type="button" className={`chip${days.includes(index) ? ' on' : ''}`} onClick={() => setDays(days.includes(index) ? days.filter((item) => item !== index) : [...days, index])}>{day}</button>)}</div></Field>}</div></Sheet>; }
+
+function RecipeEditor({ open, recipe, onClose }: { open: boolean; recipe: Recipe | null; onClose: () => void }) {
+  const toast = useToast(); const [name, setName] = useState(''); const [description, setDescription] = useState(''); const [rows, setRows] = useState<RecipeIngredient[]>([{ quantity: '', unit: '', ingredient: '' }]); const [instructions, setInstructions] = useState(''); const [minutes, setMinutes] = useState<number | null>(null); const [servings, setServings] = useState<number | null>(null); const [source, setSource] = useState(''); const [image, setImage] = useState(''); const [tags, setTags] = useState(''); const [confirmDelete, setConfirmDelete] = useState(false);
+  useEffect(() => { if (!open) return; setName(recipe?.name ?? ''); setDescription(recipe?.description ?? ''); setRows(recipe?.ingredient_rows.length ? recipe.ingredient_rows : [{ quantity: '', unit: '', ingredient: '' }]); setInstructions(recipe?.instructions ?? ''); setMinutes(recipe?.prep_minutes ?? null); setServings(recipe?.servings ?? null); setSource(recipe?.source ?? ''); setImage(recipe?.image_url ?? ''); setTags(recipe?.tags ?? ''); }, [open, recipe]);
+  const save = useInvalidatingMutation(() => { const ingredient_rows = rows.filter((row) => row.ingredient.trim()); const body = { name: name.trim(), description, ingredient_rows, instructions, prep_minutes: minutes, servings, source, image_url: image, tags }; return recipe ? api.updateRecipe(recipe.id, body) : api.createRecipe(body); }, ['recipes']); const remove = useInvalidatingMutation(() => api.deleteRecipe(recipe!.id), ['recipes', 'menu']); const updateRow = (index: number, patch: Partial<RecipeIngredient>) => setRows((all) => all.map((row, item) => item === index ? { ...row, ...patch } : row));
+  return <><Sheet open={open} onClose={onClose} title={recipe ? 'Edit recipe' : 'New recipe'} wide footer={<>{recipe && <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(true)}>Delete</Button>}<Button variant="primary" className="right" type="submit" form="recipe-form" disabled={!name.trim() || save.isPending}>Save recipe</Button></>}><form id="recipe-form" className="form" onSubmit={async (event) => { event.preventDefault(); await save.mutateAsync(undefined as never); toast(recipe ? 'Recipe saved' : 'Recipe added'); onClose(); }}><Field label="Recipe name"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="e.g. Friday tacos" /></Field><Field label="Short description" hint="optional"><Input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} placeholder="Why the family loves it" /></Field><div className="form-grid"><Field label="Servings"><Input type="number" min={1} max={100} value={servings ?? ''} onChange={(e) => setServings(e.target.value ? Number(e.target.value) : null)} /></Field><Field label="Time" hint="minutes"><Input type="number" min={1} max={1440} value={minutes ?? ''} onChange={(e) => setMinutes(e.target.value ? Number(e.target.value) : null)} /></Field></div><Field label="Source" hint="optional link or who added it"><Input value={source} onChange={(e) => setSource(e.target.value)} maxLength={1000} placeholder="https://… or Added by Hermes" /></Field><Field label="Recipe photo" hint="optional"><div className="row wrap"><Input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 1_000_000) return toast('Choose an image smaller than 1 MB'); const reader = new FileReader(); reader.onload = () => setImage(String(reader.result)); reader.readAsDataURL(file); }} />{image && <Button size="sm" variant="ghost" onClick={() => setImage('')}>Remove</Button>}</div></Field><Field label="Ingredients" hint="quantity, unit, and ingredient"><div className="ingredient-editor">{rows.map((row, index) => <div key={index}><Input value={row.quantity} onChange={(e) => updateRow(index, { quantity: e.target.value })} placeholder="2" /><Input value={row.unit} onChange={(e) => updateRow(index, { unit: e.target.value })} placeholder="cups" /><Input value={row.ingredient} onChange={(e) => updateRow(index, { ingredient: e.target.value })} placeholder="flour" /><IconButton icon={Trash2} label="Remove ingredient" onClick={() => setRows((all) => all.length === 1 ? [{ quantity: '', unit: '', ingredient: '' }] : all.filter((_, item) => item !== index))} /></div>)}</div><Button size="sm" variant="ghost" icon={Plus} onClick={() => setRows((all) => [...all, { quantity: '', unit: '', ingredient: '' }])}>Ingredient</Button></Field><Field label="Directions" hint="one step per line"><TextArea value={instructions} onChange={(e) => setInstructions(e.target.value)} style={{ minHeight: 170 }} placeholder={'Prepare ingredients\nCook…'} /></Field><Field label="Tags" hint="comma separated"><Input value={tags} onChange={(e) => setTags(e.target.value)} maxLength={300} placeholder="quick, vegetarian, favourite" /></Field></form></Sheet><Confirm open={confirmDelete} onClose={() => setConfirmDelete(false)} title={`Delete "${recipe?.name}"?`} body="It will also be removed from future menu slots and repeats." onConfirm={async () => { await remove.mutateAsync(undefined as never); toast('Recipe deleted'); onClose(); }} /></>;
 }
+
+const numberOrNull = (value: string) => { const number = Number(value); return value.trim() && Number.isFinite(number) ? number : null; };
+const describeRule = (rule: MenuRule) => rule.recurrence.freq === 'weekly' ? `Every ${rule.recurrence.interval > 1 ? `${rule.recurrence.interval} weeks on` : ''} ${(rule.recurrence.weekdays ?? []).map((day) => WEEKDAYS[day]).join(', ')} ${rule.meal_type}` : `Every ${rule.recurrence.interval} days · ${rule.meal_type}`;
+function startOfWeek(date: string, starts: 'monday' | 'sunday') { const d = new Date(`${date}T12:00:00`); return addDays(date, -(starts === 'monday' ? (d.getDay() + 6) % 7 : d.getDay())); }

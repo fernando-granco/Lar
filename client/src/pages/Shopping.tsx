@@ -67,7 +67,7 @@ export function Shopping() {
           <p className="sub">{grouped.openCount ? `${grouped.openCount} to pick up` : 'Nothing to pick up'}{current && current.id !== 1 ? ` · ${current.name}` : ''}</p>
         </div>
         <div className="row">
-          {me && <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ view: v })} options={[{ value: 'everyone', label: 'Everyone' }, { value: 'mine', label: 'Mine' }]} />}
+          {me && <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ view: v })} options={[{ value: 'everyone', label: 'Everyone' }, { value: 'mine', label: 'Only mine' }]} />}
           <Button variant="primary" icon={Plus} onClick={() => setEdit('new')} className="hide-mobile">Add item</Button>
         </div>
       </header>

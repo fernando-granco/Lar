@@ -68,14 +68,14 @@ export function Todos() {
 
   return (
     <div className="page">
-      <header className="page-head">
+      <header className="page-head compact-mobile-head">
         <div>
           <h1>To-dos</h1>
           <p className="sub">{openCount ? `${openCount} open` : 'All clear'}{mine ? ' · showing yours' : ''}</p>
         </div>
         <div className="row">
           {me && (
-            <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ view: v })} options={[{ value: 'everyone', label: 'Everyone' }, { value: 'mine', label: 'Mine' }]} />
+            <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ view: v })} options={[{ value: 'everyone', label: 'Everyone' }, { value: 'mine', label: 'Only mine' }]} />
           )}
           <Link to="/calendar" className="btn btn-secondary" aria-label="Calendar" title="Calendar"><CalendarDays /><span className="hide-mobile">Calendar</span></Link>
           <Button variant="primary" icon={Plus} onClick={() => setEdit('new')} className="hide-mobile">New to-do</Button>
@@ -105,7 +105,7 @@ export function Todos() {
           <div className="list-section">
             <header>
               <button type="button" className="row" style={{ gap: 6, color: 'inherit', font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }} onClick={() => setShowDone((v) => !v)}>
-                {showDone ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Completed <span className="n">{groups.done.length}</span>
+                {showDone ? <ChevronDown size={14} /> : <ChevronRight size={14} />} History <span className="n">{groups.done.length}</span>
               </button>
               {showDone && (
                 <Button size="sm" variant="ghost" className="right" onClick={() => clearDone.mutate(undefined as never)}>Clear completed</Button>

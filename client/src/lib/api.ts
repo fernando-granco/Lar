@@ -1,6 +1,6 @@
 import type {
   Household, Member, Group, Settings, Task, ShoppingList, ShoppingItem, Project, ProjectDetail,
-  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent, Agenda, Recipe, MenuEntry, MealType,
+  Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent, Agenda, Recipe, MenuEntry, MealType, MenuRule,
 } from '@shared/types';
 import { getCurrentMemberId, getUnlockToken, clearMember } from './store';
 
@@ -54,8 +54,8 @@ export type ExpenseInput = Partial<{ title: string; amount: number; date: string
 export const api = {
   household: () => get<Household>('/household'),
   updateSettings: (s: Partial<Settings>) => patch<Settings>('/household/settings', s),
-  createMember: (m: { name: string; color?: string; initials?: string; email?: string; is_kid?: boolean }) => post<Member>('/members', m),
-  updateMember: (id: number, m: Partial<Pick<Member, 'name' | 'color' | 'initials' | 'email' | 'is_kid' | 'archived' | 'sort_order'>>) => patch<Member>(`/members/${id}`, m),
+  createMember: (m: { name: string; color?: string; initials?: string; email?: string; is_kid?: boolean; avatar_url?: string }) => post<Member>('/members', m),
+  updateMember: (id: number, m: Partial<Pick<Member, 'name' | 'color' | 'initials' | 'email' | 'is_kid' | 'archived' | 'sort_order' | 'avatar_url'>>) => patch<Member>(`/members/${id}`, m),
   unlock: (member_id: number, password: string) => post<{ token: string | null; member: Member }>('/auth/unlock', { member_id, password }),
   accessSignIn: () => post<{ configured: boolean; member: Member | null; token: string | null; email?: string }>('/auth/access'),
   setPassword: (id: number, password: string, current?: string) => post<{ token: string; member: Member }>(`/members/${id}/password`, { password, current }),
@@ -95,6 +95,9 @@ export const api = {
   menu: (from: string, to: string) => get<MenuEntry[]>(`/menu${qs({ from, to })}`),
   setMenuEntry: (m: { meal_date: string; meal_type: MealType; recipe_id?: number | null; custom_title?: string; notes?: string }) => post<MenuEntry>('/menu', m),
   deleteMenuEntry: (id: number) => del(`/menu/${id}`),
+  menuRules: (recipeId: number) => get<MenuRule[]>(`/recipes/${recipeId}/rules`),
+  createMenuRule: (rule: { recipe_id: number; meal_type: MealType; start_date: string; recurrence: Recurrence }) => post<MenuRule>('/menu/rules', rule),
+  deleteMenuRule: (id: number) => del(`/menu/rules/${id}`),
 
   projects: (p: { status?: string; archived?: boolean; member?: number; q?: string } = {}) => get<Project[]>(`/projects${qs(p)}`),
   project: (id: number) => get<ProjectDetail>(`/projects/${id}`),

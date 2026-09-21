@@ -21,12 +21,23 @@ type Draft = {
   budget: number | null;
 };
 
+const TEMPLATES = [
+  { id: '', label: 'Start from scratch', patch: {} },
+  { id: 'repair', label: 'Home repair', patch: { name: 'Home repair', description: 'Plan the repair, parts, and work needed.', icon: 'hammer', color: '#db744f' } },
+  { id: 'vacation', label: 'Vacation', patch: { name: 'Vacation', description: 'Bookings, packing, and the things to do before we go.', icon: 'plane', color: '#3f6f9e' } },
+  { id: 'party', label: 'Party', patch: { name: 'Party', description: 'Guest list, food, supplies, and the plan for the day.', icon: 'sparkles', color: '#7c6f9b' } },
+  { id: 'renovation', label: 'Renovation', patch: { name: 'Renovation', description: 'A room-by-room plan, budget, and materials.', icon: 'home', color: '#c8913a' } },
+  { id: 'landscaping', label: 'Landscaping', patch: { name: 'Landscaping', description: 'Outdoor jobs, plants, materials, and seasonal care.', icon: 'leaf', color: '#5e8f5a' } },
+  { id: 'school', label: 'Back to School', patch: { name: 'Back to School', description: 'Supplies, forms, clothes, and first-week reminders.', icon: 'backpack', color: '#3f6f9e' } },
+] as const;
+
 export function ProjectSheet({ open, onClose, project, onCreated }: { open: boolean; onClose: () => void; project?: Project | null; onCreated?: (id: number) => void }) {
   const { data: household } = useHousehold();
   const me = useCurrentMember();
   const toast = useToast();
   const [draft, setDraft] = useState<Draft>(blank(me?.id ?? null));
   const [error, setError] = useState('');
+  const [template, setTemplate] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -34,6 +45,7 @@ export function ProjectSheet({ open, onClose, project, onCreated }: { open: bool
       const { name, description, status, priority, color, icon, owner_id, member_ids, start_date, target_date, budget } = project;
       setDraft({ name, description, status, priority, color, icon, owner_id, member_ids, start_date, target_date, budget });
     } else setDraft(blank(me?.id ?? null));
+    setTemplate('');
     setError('');
   }, [open, project, me?.id]);
 
@@ -71,6 +83,7 @@ export function ProjectSheet({ open, onClose, project, onCreated }: { open: bool
       }
     >
       <form id="project-form" className="form" onSubmit={submit}>
+        {!project && <Field label="Start with a template" hint="optional"><Select value={template} onChange={(e) => { const value = e.target.value; setTemplate(value); const selected = TEMPLATES.find((item) => item.id === value); if (selected) setDraft((current) => ({ ...current, ...selected.patch })); }}>{TEMPLATES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></Field>}
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <ProjectIcon icon={draft.icon} color={draft.color} size="lg" />
           <Field label="Project name" className="grow">

@@ -40,7 +40,7 @@ export function Projects() {
           <p className="sub">Everything you're building, fixing, and dreaming up at home.</p>
         </div>
         <div className="row">
-          {me && <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ projectsView: v })} options={[{ value: 'mine', label: 'Mine' }, { value: 'everyone', label: 'Everyone' }]} />}
+          {me && <Segmented<'everyone' | 'mine'> value={mine ? 'mine' : 'everyone'} onChange={(v) => setPrefs({ projectsView: v })} options={[{ value: 'mine', label: 'Only mine' }, { value: 'everyone', label: 'Everyone' }]} />}
           <Button variant="primary" icon={Plus} onClick={() => setCreating(true)} className="hide-mobile">New project</Button>
         </div>
       </header>

@@ -15,6 +15,7 @@ export const keys = {
   activity: (p: object = {}) => ['activity', p] as QueryKey,
   recipes: (p: object = {}) => ['recipes', p] as QueryKey,
   menu: (p: object = {}) => ['menu', p] as QueryKey,
+  menuRules: (recipeId: number) => ['menu-rules', recipeId] as QueryKey,
 };
 
 export function useHousehold() {
@@ -64,7 +65,7 @@ export function useLiveUpdates() {
           qc.invalidateQueries({ queryKey: ['tasks'] });
         }
         if (ev.entity === 'recipe') qc.invalidateQueries({ queryKey: ['recipes'] });
-        if (ev.entity === 'menu') qc.invalidateQueries({ queryKey: ['menu'] });
+        if (ev.entity === 'menu') { qc.invalidateQueries({ queryKey: ['menu'] }); qc.invalidateQueries({ queryKey: ['menu-rules'] }); }
       });
       es.onerror = () => {
         es?.close();

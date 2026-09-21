@@ -47,11 +47,11 @@ export function Badge({ tone = 'neutral', icon: Icon, children }: { tone?: strin
   );
 }
 
-export function Avatar({ member, size, group }: { member: { name: string; color: string; initials?: string }; size?: 'sm' | 'lg'; group?: boolean }) {
+export function Avatar({ member, size, group }: { member: { name: string; color: string; initials?: string; avatar_url?: string }; size?: 'sm' | 'lg'; group?: boolean }) {
   const initials = member.initials || member.name.slice(0, 2).toUpperCase();
   return (
     <span className={cx('avatar', size, group && 'group')} style={{ background: member.color }} title={member.name}>
-      {initials}
+      {member.avatar_url ? <img src={member.avatar_url} alt="" /> : initials}
     </span>
   );
 }

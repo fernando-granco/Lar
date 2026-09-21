@@ -106,7 +106,7 @@ export function Today() {
 
         {!prefs.dashboardHidden.includes('calendar') && <div style={{ order: sectionOrder('calendar') }}><CalendarCard /></div>}
 
-        {household?.settings.recipes_enabled && !prefs.dashboardHidden.includes('menu') && <div style={{ order: sectionOrder('menu') }}><MenuCard /></div>}
+        {!prefs.dashboardHidden.includes('menu') && <div style={{ order: sectionOrder('menu') }}><MenuCard /></div>}
 
         {!!projQ.data?.length && !prefs.dashboardHidden.includes('projects') && (
         <div style={{ order: sectionOrder('projects') }}>

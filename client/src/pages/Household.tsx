@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor, Lock, ChevronUp, ChevronDown, Type, ListChecks, Utensils, Baby, Eye, EyeOff, Activity as ActivityIcon, HardDrive } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor, Lock, ChevronUp, ChevronDown, Type, ListChecks, Baby, Eye, EyeOff, Activity as ActivityIcon, HardDrive, Bell, Code2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useHousehold, useInvalidatingMutation } from '@/lib/hooks';
-import { usePrefs, setPrefs, applyTheme, applyTextSize, type CompletionMode, type DashboardSection, type TextSize } from '@/lib/store';
+import { usePrefs, setPrefs, applyTheme, applyTextSize, applyPalette, applyLargeTargets, type CompletionMode, type DashboardSection, type TextSize, type Palette } from '@/lib/store';
 import { Card, Button, Field, Input, Select, Avatar, IconButton, ColorDots, Chip, Segmented, Empty, PALETTE } from '@/components/ui';
 import { Sheet, Confirm } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
@@ -22,16 +22,18 @@ export function Household() {
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [week, setWeek] = useState<'monday' | 'sunday'>('monday');
-  const [recipesEnabled, setRecipesEnabled] = useState(false);
+  const [appName, setAppName] = useState('Lar');
+  const [appTagline, setAppTagline] = useState("The family's home hub");
   useEffect(() => {
     if (data) {
       setName(data.settings.household_name);
       setCurrency(data.settings.currency);
       setWeek(data.settings.week_starts_on);
-      setRecipesEnabled(data.settings.recipes_enabled);
+      setAppName(data.settings.app_name);
+      setAppTagline(data.settings.app_tagline);
     }
   }, [data]);
-  const saveSettings = useInvalidatingMutation(() => api.updateSettings({ household_name: name.trim() || 'Lar', currency: currency.trim().toUpperCase() || 'USD', week_starts_on: week, recipes_enabled: recipesEnabled }), ['household']);
+  const saveSettings = useInvalidatingMutation(() => api.updateSettings({ household_name: name.trim() || 'Lar', app_name: appName.trim() || 'Lar', app_tagline: appTagline.trim(), currency: currency.trim().toUpperCase() || 'USD', week_starts_on: week }), ['household']);
 
   const [memberSheet, setMemberSheet] = useState<Member | 'new' | null>(null);
   const [groupSheet, setGroupSheet] = useState<Group | 'new' | null>(null);
@@ -39,11 +41,11 @@ export function Household() {
   const deleteMember = useInvalidatingMutation((id: number) => api.deleteMember(id), ['household', 'tasks', 'shopping', 'projects']);
   const deleteGroup = useInvalidatingMutation((id: number) => api.deleteGroup(id), ['household', 'tasks', 'shopping']);
 
-  const dirty = data && (name !== data.settings.household_name || currency !== data.settings.currency || week !== data.settings.week_starts_on || recipesEnabled !== data.settings.recipes_enabled);
+  const dirty = data && (name !== data.settings.household_name || appName !== data.settings.app_name || appTagline !== data.settings.app_tagline || currency !== data.settings.currency || week !== data.settings.week_starts_on);
   const origin = window.location.origin;
   const me = data?.members.find((m) => m.id === prefs.memberId);
   const dashboardLabels: Record<DashboardSection, string> = { todos: 'To-do list', shopping: 'Shopping list', calendar: 'Calendar', menu: 'Weekly menu', projects: 'Projects' };
-  const visibleDashboard = prefs.dashboardOrder.filter((key) => key !== 'menu' || recipesEnabled);
+  const visibleDashboard = prefs.dashboardOrder;
   const delayUnit = prefs.completionDelaySeconds >= 60 && prefs.completionDelaySeconds % 60 === 0 ? 'minutes' : 'seconds';
   const delayValue = delayUnit === 'minutes' ? prefs.completionDelaySeconds / 60 : prefs.completionDelaySeconds;
   const moveDashboard = (key: DashboardSection, direction: -1 | 1) => {
@@ -138,6 +140,10 @@ export function Household() {
               <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
             </Field>
             <div className="form-grid">
+              <Field label="App name" hint="shown in the header"><Input value={appName} onChange={(e) => setAppName(e.target.value)} maxLength={40} /></Field>
+              <Field label="Tagline" hint="shown below the name"><Input value={appTagline} onChange={(e) => setAppTagline(e.target.value)} maxLength={100} placeholder="The family's home hub" /></Field>
+            </div>
+            <div className="form-grid">
               <Field label="Currency" hint="ISO code">
                 <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} placeholder="USD" />
               </Field>
@@ -156,16 +162,6 @@ export function Household() {
                   { value: 'system', label: <span className="row" style={{ gap: 5 }}><Monitor size={14} /> Auto</span> },
                   { value: 'light', label: <span className="row" style={{ gap: 5 }}><Sun size={14} /> Light</span> },
                   { value: 'dark', label: <span className="row" style={{ gap: 5 }}><Moon size={14} /> Dark</span> },
-                ]}
-              />
-            </Field>
-            <Field label="Recipes & weekly menu" hint="off by default">
-              <Segmented<'off' | 'on'>
-                value={recipesEnabled ? 'on' : 'off'}
-                onChange={(value) => setRecipesEnabled(value === 'on')}
-                options={[
-                  { value: 'off', label: 'Off' },
-                  { value: 'on', label: <span className="row" style={{ gap: 5 }}><Utensils size={14} /> On</span> },
                 ]}
               />
             </Field>
@@ -207,8 +203,18 @@ export function Household() {
                   { value: 'standard', label: 'Standard' },
                   { value: 'large', label: 'Large' },
                   { value: 'extra-large', label: 'Extra large' },
+                  { value: 'huge', label: 'Huge' },
                 ]}
               />
+            </Field>
+            <Field label="Touch target size" hint="this device">
+              <Segmented<'standard' | 'large'> value={prefs.largeTargets ? 'large' : 'standard'} onChange={(value) => { const largeTargets = value === 'large'; setPrefs({ largeTargets }); applyLargeTargets(largeTargets); }} options={[{ value: 'standard', label: 'Standard' }, { value: 'large', label: 'Large' }]} />
+            </Field>
+            <Field label="Colour palette" hint="this device">
+              <Segmented<Palette> value={prefs.palette} onChange={(palette) => { setPrefs({ palette }); applyPalette(palette); }} options={[{ value: 'classic', label: 'Classic' }, { value: 'ocean', label: 'Ocean' }, { value: 'berry', label: 'Berry' }, { value: 'sunset', label: 'Sunset' }]} />
+            </Field>
+            <Field label="Notifications" hint="optional, this device">
+              <div className="row wrap"><Button icon={Bell} onClick={async () => { if (!('Notification' in window)) return toast('This browser does not support notifications'); const permission = await Notification.requestPermission(); const notificationsEnabled = permission === 'granted'; setPrefs({ notificationsEnabled }); toast(notificationsEnabled ? 'Gentle reminders are on' : 'Notifications were not allowed'); }}>{prefs.notificationsEnabled ? 'Notifications on' : 'Enable reminders'}</Button>{prefs.notificationsEnabled && <Button variant="ghost" onClick={() => setPrefs({ notificationsEnabled: false })}>Turn off</Button>}</div>
             </Field>
             <Field label="After checking an item" hint="to-dos and shopping">
               <Select value={prefs.completionMode} onChange={(e) => setPrefs({ completionMode: e.target.value as CompletionMode })}>
@@ -268,7 +274,7 @@ export function Household() {
 
       {section === 'connections' && <><InstallAppCard /><CalendarsCard /></>}
       {section === 'activity' && <ActivityCard />}
-      {section === 'data' && <BackupCard />}
+      {section === 'data' && <><Card title="About Lar" icon={Code2}><p className="muted">Lar is free, self-hosted, and open source. Your household data stays on your own server.</p><a className="btn btn-secondary" style={{ marginTop: 14, display: 'inline-flex' }} href="https://github.com/fernando-granco/Lar" target="_blank" rel="noreferrer"><Code2 /> View Lar on GitHub</a></Card><BackupCard /></>}
 
       <MemberSheet open={memberSheet !== null} member={memberSheet === 'new' ? null : memberSheet} onClose={() => setMemberSheet(null)} />
       <GroupSheet open={groupSheet !== null} group={groupSheet === 'new' ? null : groupSheet} members={data?.members ?? []} onClose={() => setGroupSheet(null)} />
@@ -299,6 +305,7 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
   const [color, setColor] = useState(PALETTE[0]!);
   const [initials, setInitials] = useState('');
   const [email, setEmail] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [isKid, setIsKid] = useState(false);
   const [pwMode, setPwMode] = useState<'closed' | 'set' | 'change' | 'remove'>('closed');
   const [current, setCurrent] = useState('');
@@ -310,6 +317,7 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
     setColor(member?.color ?? PALETTE[(data?.members.length ?? 0) % PALETTE.length]!);
     setInitials(member?.initials ?? '');
     setEmail(member?.email ?? '');
+    setAvatarUrl(member?.avatar_url ?? '');
     setIsKid(member?.is_kid ?? false);
     setPwMode('closed');
     setCurrent('');
@@ -319,8 +327,8 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
   const save = useInvalidatingMutation(
     () =>
       member
-        ? api.updateMember(member.id, { name: name.trim(), color, initials: initials.trim() || undefined, email: data?.settings.access_sign_in ? email.trim() || null : undefined, is_kid: isKid })
-        : api.createMember({ name: name.trim(), color, initials: initials.trim() || undefined, email: data?.settings.access_sign_in ? email.trim() || undefined : undefined, is_kid: isKid }),
+        ? api.updateMember(member.id, { name: name.trim(), color, initials: initials.trim() || undefined, email: data?.settings.access_sign_in ? email.trim() || null : undefined, is_kid: isKid, avatar_url: avatarUrl })
+        : api.createMember({ name: name.trim(), color, initials: initials.trim() || undefined, email: data?.settings.access_sign_in ? email.trim() || undefined : undefined, is_kid: isKid, avatar_url: avatarUrl }),
     ['household'],
   );
   const password = useInvalidatingMutation(async () => {
@@ -341,11 +349,15 @@ function MemberSheet({ open, member, onClose }: { open: boolean; member: Member 
     <Sheet open={open} onClose={onClose} title={member ? 'Edit person' : 'Add a person'} footer={<Button variant="primary" className="right" disabled={!name.trim() || save.isPending} onClick={async () => { await save.mutateAsync(undefined as never); toast(member ? 'Saved' : `${name.trim()} added`); onClose(); }}>{member ? 'Save' : 'Add'}</Button>}>
       <div className="form">
         <div className="row">
-          <Avatar member={{ name: name || '?', color, initials: initials || (name ? name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') : '?') }} size="lg" />
+          <Avatar member={{ name: name || '?', color, initials: initials || (name ? name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') : '?'), avatar_url: avatarUrl }} size="lg" />
           <Field label="Name" className="grow">
             <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="e.g. Maria" />
           </Field>
         </div>
+        <Field label="Profile picture" hint="optional">
+          <div className="row wrap"><Input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 1_000_000) return toast('Choose an image smaller than 1 MB'); const reader = new FileReader(); reader.onload = () => setAvatarUrl(String(reader.result)); reader.readAsDataURL(file); }} />{avatarUrl && <Button size="sm" variant="ghost" onClick={() => setAvatarUrl('')}>Remove picture</Button>}</div>
+          <p className="faint" style={{ fontSize: 12, marginTop: 5 }}>Saved in Lar's backup. PNG, JPEG, or WebP up to 1 MB.</p>
+        </Field>
         <Field label="Color">
           <ColorDots value={color} onChange={setColor} />
         </Field>

@@ -16,7 +16,7 @@ import { queryTasks, createTask, updateTask, setDone, deleteTask } from './route
 import { listShoppingLists, queryShoppingItems, createShoppingItem, updateShoppingItem, setChecked, deleteShoppingItem, clearChecked } from './routes/shopping.js';
 import { queryProjects, getProjectDetail, createProject, updateProject, createMilestone, updateMilestone, createExpense } from './routes/projects.js';
 import { summary } from './routes/misc.js';
-import { listRecipes, createRecipe, updateRecipe, deleteRecipe, listMenu, upsertMenuEntry, deleteMenuEntry } from './routes/recipes.js';
+import { listRecipes, createRecipe, updateRecipe, deleteRecipe, listMenu, upsertMenuEntry, deleteMenuEntry, createMenuRule, listMenuRules } from './routes/recipes.js';
 import { parseShoppingText, parseTaskText } from '../shared/parse.js';
 import type { Assignees, Task, ShoppingItem, Project } from '../shared/types.js';
 
@@ -468,18 +468,18 @@ export function buildMcpServer(actor: Actor) {
     ({ limit }) => run(() => db.prepare('SELECT actor_name, summary, created_at FROM activity ORDER BY id DESC LIMIT ?').all(limit)),
   );
 
-  // ----- optional recipes & weekly menu -----
+  // ----- recipes & weekly menu -----
   server.registerTool(
     'list_recipes',
-    { title: 'List recipes', description: 'Search the household recipe book. The feature must be enabled in Household settings.', inputSchema: { search: z.string().optional() }, annotations: { readOnlyHint: true } },
-    ({ search }) => run(() => listRecipes(search).map((r) => ({ id: r.id, name: r.name, description: r.description || undefined, prep_minutes: r.prep_minutes, tags: r.tags || undefined, ingredients: r.ingredients, instructions: r.instructions }))),
+    { title: 'List recipes', description: 'Search the household recipe book.', inputSchema: { search: z.string().optional() }, annotations: { readOnlyHint: true } },
+    ({ search }) => run(() => listRecipes(search).map((r) => ({ id: r.id, name: r.name, description: r.description || undefined, prep_minutes: r.prep_minutes, servings: r.servings, source: r.source || undefined, tags: r.tags || undefined, ingredients: r.ingredient_rows, instructions: r.instructions }))),
   );
   server.registerTool(
     'add_recipe',
     {
       title: 'Add a recipe',
       description: 'Save a recipe in the household recipe book.',
-      inputSchema: { name: z.string().min(1), description: z.string().optional(), ingredients: z.string().optional(), instructions: z.string().optional(), prep_minutes: z.number().int().min(1).optional(), tags: z.string().optional() },
+      inputSchema: { name: z.string().min(1), description: z.string().optional(), ingredients: z.string().optional(), ingredient_rows: z.array(z.object({ quantity: z.string().optional(), unit: z.string().optional(), ingredient: z.string().min(1) })).optional(), instructions: z.string().optional(), prep_minutes: z.number().int().min(1).optional(), servings: z.number().int().min(1).optional(), source: z.string().optional(), tags: z.string().optional() },
     },
     (input) => run(() => createRecipe(input, actor)),
   );
@@ -488,7 +488,7 @@ export function buildMcpServer(actor: Actor) {
     {
       title: 'Update a recipe',
       description: 'Change a recipe by id.',
-      inputSchema: { id: z.number().int(), name: z.string().optional(), description: z.string().optional(), ingredients: z.string().optional(), instructions: z.string().optional(), prep_minutes: z.number().int().min(1).nullable().optional(), tags: z.string().optional() },
+      inputSchema: { id: z.number().int(), name: z.string().optional(), description: z.string().optional(), ingredients: z.string().optional(), ingredient_rows: z.array(z.object({ quantity: z.string().optional(), unit: z.string().optional(), ingredient: z.string().min(1) })).optional(), instructions: z.string().optional(), prep_minutes: z.number().int().min(1).nullable().optional(), servings: z.number().int().min(1).nullable().optional(), source: z.string().optional(), tags: z.string().optional() },
     },
     ({ id, ...patch }) => run(() => updateRecipe(id, patch, actor)),
   );
@@ -496,6 +496,16 @@ export function buildMcpServer(actor: Actor) {
     'delete_recipe',
     { title: 'Delete a recipe', description: 'Permanently delete a recipe by id.', inputSchema: { id: z.number().int() }, annotations: { destructiveHint: true } },
     ({ id }) => run(() => { deleteRecipe(id, actor); return { deleted: id }; }),
+  );
+  server.registerTool(
+    'schedule_recipe',
+    { title: 'Schedule a recurring recipe', description: 'Repeat a recipe every few days or on named weekly days, such as Friday dinner.', inputSchema: { recipe_id: z.number().int().positive(), meal: z.enum(['breakfast', 'lunch', 'dinner']), start_date: zDate, frequency: z.enum(['daily', 'weekly']), interval: z.number().int().min(1).default(1), weekdays: z.array(z.number().int().min(0).max(6)).optional() } },
+    ({ recipe_id, meal, start_date, frequency, interval, weekdays }) => run(() => createMenuRule({ recipe_id, meal_type: meal, start_date, recurrence: { freq: frequency, interval, weekdays } }, actor)),
+  );
+  server.registerTool(
+    'list_recipe_schedules',
+    { title: 'List recurring recipe schedules', description: 'Show all recurring meal rules, optionally for one recipe.', inputSchema: { recipe_id: z.number().int().positive().optional() }, annotations: { readOnlyHint: true } },
+    ({ recipe_id }) => run(() => listMenuRules(recipe_id)),
   );
   server.registerTool(
     'get_weekly_menu',
@@ -520,7 +530,7 @@ export function buildMcpServer(actor: Actor) {
   return server;
 }
 
-const INSTRUCTIONS = `Lar is a family's household hub: shared to-dos, shopping lists, home projects, and an optional recipe book and weekly menu.
+const INSTRUCTIONS = `Lar is a family's household hub: shared to-dos, shopping lists, home projects, recipes, and a weekly menu.
 Start with lar_overview to learn the people and groups. Refer to people and projects by name.
 "For" on a to-do or shopping item is who it applies to; empty means everyone in the household.
 Dates are YYYY-MM-DD in the household's local timezone.`;

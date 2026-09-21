@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { usePrefs, setPrefs } from '@/lib/store';
 import { useHousehold, useLiveUpdates } from '@/lib/hooks';
+import { useGentleNotifications } from '@/lib/notifications';
 import { Layout } from './components/Layout';
 import { Today } from './pages/Today';
 import { Todos } from './pages/Todos';
@@ -16,6 +17,7 @@ import { Recipes } from './pages/Recipes';
 
 export function App() {
   useLiveUpdates();
+  useGentleNotifications();
   const { data, isLoading, error } = useHousehold();
   const { memberId } = usePrefs();
   const triedAccess = useRef(false);
@@ -55,7 +57,7 @@ export function App() {
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/household" element={<Household />} />
         <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/recipes" element={data.settings.recipes_enabled ? <Recipes /> : <Navigate to="/household" replace />} />
+        <Route path="/recipes" element={<Recipes />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
     </Layout>
