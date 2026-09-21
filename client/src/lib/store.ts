@@ -7,6 +7,9 @@ import { useSyncExternalStore } from 'react';
 export type DashboardSection = 'todos' | 'shopping' | 'calendar' | 'menu' | 'projects';
 export type CompletionMode = 'instant' | 'delay' | 'screen';
 export type TextSize = 'standard' | 'large' | 'extra-large';
+export type ProjectOverviewSection = 'details' | 'milestones' | 'todos' | 'shopping' | 'budget' | 'notes';
+export type ProjectOverviewWidth = 'half' | 'full';
+export type ProjectOverviewDensity = 'compact' | 'comfortable';
 
 type Prefs = {
   memberId: number | null;
@@ -16,9 +19,14 @@ type Prefs = {
   view: 'mine' | 'everyone';
   projectsView: 'mine' | 'everyone';
   dashboardOrder: DashboardSection[];
+  dashboardHidden: DashboardSection[];
   textSize: TextSize;
   completionMode: CompletionMode;
   completionDelaySeconds: number;
+  projectOverviewOrder: ProjectOverviewSection[];
+  projectOverviewHidden: ProjectOverviewSection[];
+  projectOverviewWidths: Record<ProjectOverviewSection, ProjectOverviewWidth>;
+  projectOverviewDensity: ProjectOverviewDensity;
 };
 
 const KEY = 'lar.prefs';
@@ -31,9 +39,14 @@ const DEFAULTS: Prefs = {
   view: 'everyone',
   projectsView: 'mine',
   dashboardOrder: ['todos', 'shopping', 'calendar', 'menu', 'projects'],
+  dashboardHidden: [],
   textSize: 'standard',
   completionMode: 'screen',
   completionDelaySeconds: 10,
+  projectOverviewOrder: ['details', 'milestones', 'todos', 'shopping', 'budget', 'notes'],
+  projectOverviewHidden: [],
+  projectOverviewWidths: { details: 'half', milestones: 'half', todos: 'full', shopping: 'full', budget: 'half', notes: 'half' },
+  projectOverviewDensity: 'comfortable',
 };
 
 function read(): Prefs {
@@ -43,6 +56,15 @@ function read(): Prefs {
       const parsed = { ...DEFAULTS, ...JSON.parse(raw) } as Prefs;
       const valid: DashboardSection[] = ['todos', 'shopping', 'calendar', 'menu', 'projects'];
       parsed.dashboardOrder = [...new Set([...(Array.isArray(parsed.dashboardOrder) ? parsed.dashboardOrder : []), ...valid])].filter((x): x is DashboardSection => valid.includes(x as DashboardSection));
+      parsed.dashboardHidden = (Array.isArray(parsed.dashboardHidden) ? parsed.dashboardHidden : []).filter((x): x is DashboardSection => valid.includes(x as DashboardSection));
+      const projectValid: ProjectOverviewSection[] = ['details', 'milestones', 'todos', 'shopping', 'budget', 'notes'];
+      parsed.projectOverviewOrder = [...new Set([...(Array.isArray(parsed.projectOverviewOrder) ? parsed.projectOverviewOrder : []), ...projectValid])].filter((x): x is ProjectOverviewSection => projectValid.includes(x as ProjectOverviewSection));
+      parsed.projectOverviewHidden = (Array.isArray(parsed.projectOverviewHidden) ? parsed.projectOverviewHidden : []).filter((x): x is ProjectOverviewSection => projectValid.includes(x as ProjectOverviewSection));
+      parsed.projectOverviewWidths = Object.fromEntries(projectValid.map((key) => {
+        const width = parsed.projectOverviewWidths?.[key];
+        return [key, width === 'half' || width === 'full' ? width : DEFAULTS.projectOverviewWidths[key]];
+      })) as Record<ProjectOverviewSection, ProjectOverviewWidth>;
+      parsed.projectOverviewDensity = parsed.projectOverviewDensity === 'compact' ? 'compact' : 'comfortable';
       parsed.completionDelaySeconds = Math.min(3600, Math.max(1, Number(parsed.completionDelaySeconds) || 10));
       return parsed;
     }

@@ -43,7 +43,7 @@ export function MobileQuickShopping() {
 
   return (
     <>
-      <button type="button" className="mobile-shop-button hide-desktop" onClick={() => setOpen(true)} aria-label="Quick add to shopping list" title="Add to shopping">
+      <button type="button" className="btn btn-secondary mobile-shop-button hide-desktop" onClick={() => setOpen(true)} aria-label="Quick add to shopping list" title="Add to shopping">
         <ShoppingBasket /><Plus className="plus" />
       </button>
       <Sheet

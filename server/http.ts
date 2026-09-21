@@ -33,6 +33,12 @@ export function parse<T extends ZodTypeAny>(schema: T, data: unknown): z.infer<T
   return result.data;
 }
 
+/** Keep PATCH semantics strict when defaults inside a partial Zod schema materialize omitted keys. */
+export function onlySupplied<T extends Record<string, unknown>>(input: unknown, parsed: T): T {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return parsed;
+  return Object.fromEntries(Object.entries(parsed).filter(([key]) => Object.prototype.hasOwnProperty.call(input, key))) as T;
+}
+
 export function idParam(req: Request, name = 'id'): number {
   const id = Number(req.params[name]);
   if (!Number.isInteger(id) || id <= 0) throw badRequest(`Invalid ${name}`);

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, nowIso } from '../db.js';
-import { handler, parse, idParam, notFound, badRequest, zAssignees, zIdList } from '../http.js';
+import { handler, parse, onlySupplied, idParam, notFound, badRequest, zAssignees, zIdList } from '../http.js';
 import { actorFrom, logChange, type Actor } from '../context.js';
 import { loadShoppingItems, getShoppingItem, setAssignees, assignedToMemberSql, rememberPurchase } from '../repo.js';
 import type { ShoppingItem, ShoppingList } from '../../shared/types.js';
@@ -146,7 +146,7 @@ shopping.post(
 export function updateShoppingItem(id: number, input: unknown, actor: Actor): ShoppingItem {
   const current = getShoppingItem(id);
   if (!current) throw notFound('Item not found');
-  const body = parse(itemBody.partial().extend({ checked: z.boolean().optional() }), input);
+  const body = onlySupplied(input, parse(itemBody.partial().extend({ checked: z.boolean().optional() }), input));
   const next = { ...current, ...body };
   if (body.list_id && !db.prepare('SELECT 1 FROM shopping_lists WHERE id = ?').get(body.list_id)) throw badRequest('List does not exist');
   db.prepare(

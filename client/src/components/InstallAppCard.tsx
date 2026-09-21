@@ -23,7 +23,7 @@ export function InstallAppCard() {
           <div>
             <b>Open the secure address first</b>
             <p className="muted">
-              Visit <a href="https://lar.granco.me">lar.granco.me</a> on your phone. Installation requires HTTPS and is unavailable from the local IP address.
+              Open Lar's HTTPS address on your phone. Installation is unavailable from a plain local IP address in most browsers.
             </p>
           </div>
         </div>

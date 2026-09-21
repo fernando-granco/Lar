@@ -22,10 +22,11 @@ type Draft = {
   assignees: ShoppingItem['assignees'];
 };
 
-export function ShoppingItemSheet({ open, onClose, item, listId, lists }: { open: boolean; onClose: () => void; item?: ShoppingItem | null; listId: number; lists?: ShoppingList[] }) {
+export function ShoppingItemSheet({ open, onClose, item, listId, lists, defaultMemberIds }: { open: boolean; onClose: () => void; item?: ShoppingItem | null; listId: number; lists?: ShoppingList[]; defaultMemberIds?: number[] }) {
   const { data: household } = useHousehold();
   const toast = useToast();
   const [draft, setDraft] = useState<Draft>({ name: '', quantity: null, unit: '', category: '', notes: '', price: null, priority: 'normal', list_id: listId, assignees: { member_ids: [], group_ids: [] } });
+  const defaultMemberKey = defaultMemberIds?.join(',') ?? '';
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,9 +35,9 @@ export function ShoppingItemSheet({ open, onClose, item, listId, lists }: { open
     if (item) {
       const { name, quantity, unit, category, notes, price, priority, list_id, assignees } = item;
       setDraft({ name, quantity, unit, category, notes, price, priority, list_id, assignees });
-    } else setDraft({ name: '', quantity: null, unit: '', category: '', notes: '', price: null, priority: 'normal', list_id: listId, assignees: { member_ids: [], group_ids: [] } });
+    } else setDraft({ name: '', quantity: null, unit: '', category: '', notes: '', price: null, priority: 'normal', list_id: listId, assignees: defaultMemberIds?.length ? { member_ids: defaultMemberIds, group_ids: [] } : { member_ids: [], group_ids: [] } });
     setError('');
-  }, [open, item, listId]);
+  }, [open, item, listId, defaultMemberKey]);
 
   const save = useInvalidatingMutation(async (d: Draft) => {
     const body: ShoppingItemInput = { ...d };
@@ -100,7 +101,7 @@ export function ShoppingItemSheet({ open, onClose, item, listId, lists }: { open
               </Select>
             </Field>
           </div>
-          <Field label="Who should pick it up">
+          <Field label="Who should pick it up" hint={defaultMemberIds?.length ? 'project members selected automatically' : undefined}>
             <AssigneePicker value={draft.assignees} onChange={(assignees) => set({ assignees })} members={household?.members ?? []} groups={household?.groups ?? []} />
           </Field>
           <div className="form-grid">

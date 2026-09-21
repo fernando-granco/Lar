@@ -9,11 +9,22 @@
 - **To-dos** for everyone or for specific people and groups (like "Kids"). Due dates, priorities, repeating chores, and a quick-add that understands "Call plumber tomorrow !high".
 - **Shopping list** with priorities, quantities, aisle grouping, suggestions from what you usually buy, extra lists, and a one-tap mobile fast-add. "2x oat milk !urgent" just works.
 - **Projects** with milestones, to-dos, a shopping list inside the project, budget and expense tracking, notes, and links. Enough to run a backyard refresh or a kitchen remodel without becoming a chore itself.
-- **Today** view that shows what needs attention right now, in the order each device prefers.
+- **Today** view with per-device ordering and show/hide controls for to-dos, shopping, calendar, menu, and projects.
 - **Recipes and weekly menu**, opt-in from Household settings so families that do not need it keep a simpler Lar.
 - **Live updates** between phones and computers on the network.
-- **Phone friendly** and installable to the home screen. Light and dark themes, larger text options, and configurable checked-item behaviour.
-- **REST API** for scripts and agents, with an activity log of who changed what.
+- **Phone friendly** and installable to the home screen, with a one-tap shopping action beside the mobile to-do button. Light and dark themes, larger text options, and configurable checked-item behaviour.
+- **Customizable project overviews** with show/hide, ordering, card widths, compact/comfortable layouts, and direct creation of milestones, to-dos, shopping items, expenses, notes, and links.
+- **REST API and MCP server** for scripts and agents, with an activity log of who changed what.
+
+## Personalize Lar
+
+The **Household** screen is split into focused tabs for Family, General, Display, Connections, Activity, and Data. Display preferences are stored on the current device, so a wall tablet, phone, and laptop can each use a layout and text size that suits them.
+
+- Reorder or hide individual cards on the Today dashboard.
+- Choose when checked to-dos and shopping items move out of the active list.
+- Choose standard, large, or extra-large text.
+- Enable the recipe book and weekly menu only when the household wants it.
+- Customize project Overview cards by visibility, order, width, and density. New project to-dos and shopping items automatically start assigned to the project's owner and involved people.
 
 ## Run it with Docker
 
@@ -63,6 +74,8 @@ Lar has no accounts. Each device picks a person from the household, and that cho
 
 Everything the app does is available under `/api/v1`. Send `X-Lar-Member: <id>` to act as a person, or `X-Lar-Agent: <name>` to act as an agent, so the activity log stays meaningful. Acting as a person who set a password needs an `X-Lar-Unlock` token from `POST /auth/unlock`.
 
+`PATCH` endpoints update only the fields included in the request, so a small edit never resets the other values on an item.
+
 | Area | Endpoints |
 | --- | --- |
 | Household | `GET /household`, `PATCH /household/settings`, `POST/PATCH/DELETE /members/:id`, `POST/PATCH/DELETE /groups/:id` |
@@ -83,7 +96,7 @@ curl -X POST http://YOUR-SERVER-IP:3001/api/v1/shopping/items \
 
 ## Agents (MCP)
 
-Lar is an MCP server. Point any Model Context Protocol client at `http://YOUR-SERVER-IP:3001/mcp` (Streamable HTTP, stateless) and it gets tools such as `lar_overview`, `list_todos`, `add_todo`, `complete_todo`, `add_shopping_items`, `check_shopping_items`, `list_projects`, `get_project`, `add_milestone`, `add_expense`, `list_recipes`, and `plan_meal`. Tools take people and projects by name, so "add urgent oat milk for Fernando" or "plan tacos for Friday dinner" just works.
+Lar is an MCP server. Point any Model Context Protocol client at `http://YOUR-SERVER-IP:3001/mcp` (Streamable HTTP, stateless) and it gets tools such as `lar_overview`, `list_todos`, `add_todo`, `complete_todo`, `add_shopping_items`, `check_shopping_items`, `list_projects`, `get_project`, `add_milestone`, `add_expense`, `list_recipes`, and `plan_meal`. Tools take people and projects by name, so "add urgent oat milk for Alex" or "plan tacos for Friday dinner" just works.
 
 Send `X-Lar-Agent: <name>` so the activity log says who did it. If `LAR_API_KEY` is set, also send `Authorization: Bearer <key>`.
 
@@ -135,6 +148,15 @@ npm start          # run the production build
 ```
 
 The server is Express plus better-sqlite3 (TypeScript). The client is React, TypeScript, and Vite with hand-written CSS. Shared types live in `shared/`.
+
+Before submitting a change, run:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the project conventions and [SECURITY.md](SECURITY.md) for responsible vulnerability reporting.
 
 ## License
 

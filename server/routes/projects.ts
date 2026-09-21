@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, nowIso } from '../db.js';
-import { handler, parse, idParam, notFound, zDate, zColor, zIdList } from '../http.js';
+import { handler, parse, onlySupplied, idParam, notFound, zDate, zColor, zIdList } from '../http.js';
 import { actorFrom, logChange, type Actor } from '../context.js';
 import { loadTasks, loadShoppingItems, todayIso } from '../repo.js';
 import type { Project, ProjectDetail, Milestone, Expense, ProjectLink } from '../../shared/types.js';
@@ -143,7 +143,7 @@ projects.post(
 export function updateProject(id: number, input: unknown, actor: Actor): ProjectDetail {
   const current = getProject(id);
   if (!current) throw notFound('Project not found');
-  const body = parse(projectBody.partial().extend({ archived: z.boolean().optional() }), input);
+  const body = onlySupplied(input, parse(projectBody.partial().extend({ archived: z.boolean().optional() }), input));
   const next = { ...current, ...body };
   const completed_at = next.status === 'done' ? current.completed_at ?? nowIso() : null;
   db.prepare(
@@ -237,7 +237,7 @@ projects.post(
 export function updateMilestone(id: number, input: unknown, actor: Actor): Milestone {
   const current = getMilestone(id);
   if (!current) throw notFound('Milestone not found');
-  const body = parse(milestoneBody.partial().extend({ done: z.boolean().optional(), sort_order: z.number().int().optional() }), input);
+  const body = onlySupplied(input, parse(milestoneBody.partial().extend({ done: z.boolean().optional(), sort_order: z.number().int().optional() }), input));
   const done_at = body.done === undefined ? current.done_at : body.done ? current.done_at ?? nowIso() : null;
   db.prepare('UPDATE milestones SET title = ?, description = ?, due_date = ?, done_at = ?, sort_order = ? WHERE id = ?').run(
     body.title ?? current.title,
@@ -306,7 +306,7 @@ projects.post(
 export function updateExpense(id: number, input: unknown, actor: Actor): Expense {
   const current = getExpense(id);
   if (!current) throw notFound('Expense not found');
-  const body = parse(expenseBody.partial(), input);
+  const body = onlySupplied(input, parse(expenseBody.partial(), input));
   const next = { ...current, ...body };
   db.prepare('UPDATE expenses SET title = ?, amount = ?, date = ?, category = ?, notes = ?, shopping_item_id = ? WHERE id = ?').run(
     next.title, next.amount, next.date, next.category, next.notes, next.shopping_item_id, id,
@@ -361,7 +361,7 @@ projects.patch(
     const id = idParam(req);
     const current = getLink(id);
     if (!current) throw notFound('Link not found');
-    const body = parse(linkBody.partial(), req.body);
+    const body = onlySupplied(req.body, parse(linkBody.partial(), req.body));
     db.prepare('UPDATE project_links SET label = ?, url = ? WHERE id = ?').run(body.label ?? current.label, body.url ?? current.url, id);
     logChange(actorFrom(req), 'updated', 'project', current.project_id, `Updated link "${body.label ?? current.label}"`);
     return getLink(id);

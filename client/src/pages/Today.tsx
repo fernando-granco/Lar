@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckSquare, ShoppingBasket, Hammer, Plus, ArrowRight, Activity as ActivityIcon, CalendarDays, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckSquare, ShoppingBasket, Hammer, Plus, ArrowRight, CalendarDays } from 'lucide-react';
 import { api } from '@/lib/api';
 import { keys, useHousehold, useSummary, useCurrentMember } from '@/lib/hooks';
-import { greeting, friendlyDate, timeAgo, today, addDays } from '@/lib/format';
+import { greeting, friendlyDate, today, addDays } from '@/lib/format';
 import { Card, Button, Empty, Progress, Badge } from '@/components/ui';
 import { TaskRow } from '@/components/TaskRow';
 import { ShoppingRow } from '@/components/ShoppingRow';
@@ -15,6 +15,7 @@ import { CalendarCard } from '@/components/CalendarCard';
 import { PROJECT_STATUS } from '@/lib/format';
 import { usePrefs } from '@/lib/store';
 import { MenuCard } from '@/components/MenuCard';
+import { MobileQuickShopping } from '@/components/MobileQuickShopping';
 import type { Task, ShoppingItem } from '@shared/types';
 
 export function Today() {
@@ -26,8 +27,6 @@ export function Today() {
   const shopQ = useQuery({ queryKey: keys.shoppingItems({ list: 1, status: 'open', member: me?.id }), queryFn: () => api.shoppingItems({ list: 1, status: 'open', member: me?.id }) });
   const projQ = useQuery({ queryKey: keys.projects({ status: 'active', member: me?.id }), queryFn: () => api.projects({ status: 'active', member: me?.id }) });
   const allProjQ = useQuery({ queryKey: keys.projects({ status: 'all' }), queryFn: () => api.projects({ status: 'all' }) });
-  const [showActivity, setShowActivity] = useState(false);
-  const actQ = useQuery({ queryKey: keys.activity({ limit: 12 }), queryFn: () => api.activity({ limit: 12 }), enabled: showActivity });
   const [editTask, setEditTask] = useState<Task | null | 'new'>(null);
   const [editItem, setEditItem] = useState<ShoppingItem | null | 'new'>(null);
 
@@ -52,6 +51,7 @@ export function Today() {
           <Link to="/calendar" className="btn btn-secondary" aria-label="Calendar" title="Calendar"><CalendarDays /><span className="hide-mobile">Calendar</span></Link>
           <Button icon={Plus} onClick={() => setEditItem('new')} className="hide-mobile">Shopping item</Button>
           <Button variant="primary" icon={Plus} onClick={() => setEditTask('new')}>To-do</Button>
+          <MobileQuickShopping />
         </div>
       </header>
 
@@ -73,7 +73,7 @@ export function Today() {
       )}
 
       <div className="dashboard-sections">
-        <div style={{ order: sectionOrder('todos') }}>
+        {!prefs.dashboardHidden.includes('todos') && <div style={{ order: sectionOrder('todos') }}>
           <Card title={me ? 'Needs your attention' : 'Needs attention'} icon={CheckSquare} flush action={<Link to="/todos" className="btn btn-ghost btn-sm">All to-dos <ArrowRight /></Link>}>
           {tasksQ.isLoading ? null : attention.length ? (
             <div className="list">{attention.slice(0, 6).map((x) => <TaskRow key={x.id} task={x} onOpen={setEditTask} projectName={projectName(x.project_id)} />)}</div>
@@ -87,9 +87,9 @@ export function Today() {
             </div>
           )}
           </Card>
-        </div>
+        </div>}
 
-        <div style={{ order: sectionOrder('shopping') }}>
+        {!prefs.dashboardHidden.includes('shopping') && <div style={{ order: sectionOrder('shopping') }}>
           <Card title="Shopping list" icon={ShoppingBasket} flush action={<Link to="/shopping" className="btn btn-ghost btn-sm">Open list <ArrowRight /></Link>}>
           {shopQ.isLoading ? null : shopQ.data?.length ? (
             <div className="list">{shopQ.data.slice(0, 6).map((i) => <ShoppingRow key={i.id} item={i} onOpen={setEditItem} />)}</div>
@@ -102,13 +102,13 @@ export function Today() {
             </Link>
           )}
           </Card>
-        </div>
+        </div>}
 
-        <div style={{ order: sectionOrder('calendar') }}><CalendarCard /></div>
+        {!prefs.dashboardHidden.includes('calendar') && <div style={{ order: sectionOrder('calendar') }}><CalendarCard /></div>}
 
-        {household?.settings.recipes_enabled && <div style={{ order: sectionOrder('menu') }}><MenuCard /></div>}
+        {household?.settings.recipes_enabled && !prefs.dashboardHidden.includes('menu') && <div style={{ order: sectionOrder('menu') }}><MenuCard /></div>}
 
-        {!!projQ.data?.length && (
+        {!!projQ.data?.length && !prefs.dashboardHidden.includes('projects') && (
         <div style={{ order: sectionOrder('projects') }}>
         <Card title={me ? 'Your projects in motion' : 'Projects in motion'} icon={Hammer} action={<Link to="/projects" className="btn btn-ghost btn-sm">All projects <ArrowRight /></Link>}>
         {projQ.data?.length ? (
@@ -140,30 +140,6 @@ export function Today() {
         )}
       </div>
 
-      <section className="card">
-        <button type="button" className="card-head" style={{ width: '100%', textAlign: 'left', paddingBottom: showActivity ? 6 : 16 }} onClick={() => setShowActivity((v) => !v)} aria-expanded={showActivity}>
-          <span className="icon-badge"><ActivityIcon /></span>
-          <h2 className="grow">Recent activity</h2>
-          {showActivity ? <ChevronDown size={18} className="faint" /> : <ChevronRight size={18} className="faint" />}
-        </button>
-        {showActivity && (
-          <div className="card-body flush">
-            {actQ.data?.length ? (
-              <div className="list">
-                {actQ.data.map((a) => (
-                  <div key={a.id} className="activity-row">
-                    <span><b>{a.actor_name}</b> <span className="muted">{lower(a.summary)}</span></span>
-                    <span className="when">{timeAgo(a.created_at)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : actQ.isLoading ? null : (
-              <Empty icon={ActivityIcon} title="Nothing yet" />
-            )}
-          </div>
-        )}
-      </section>
-
       <TaskSheet open={editTask !== null} onClose={() => setEditTask(null)} task={editTask === 'new' ? null : editTask} projects={allProjQ.data?.filter((p) => p.status !== 'done')} />
       <ShoppingItemSheet open={editItem !== null} onClose={() => setEditItem(null)} item={editItem === 'new' ? null : editItem} listId={1} />
       {household && null}
@@ -177,5 +153,3 @@ function summaryLine(s?: { tasks_open: number; tasks_due_today: number; tasks_ov
   if (s.tasks_due_today) return `${s.tasks_due_today} ${s.tasks_due_today === 1 ? 'thing' : 'things'} to do today.`;
   return 'Nothing pressing today. A quiet home is a good home.';
 }
-
-const lower = (s: string) => (s ? s[0]!.toLowerCase() + s.slice(1) : s);

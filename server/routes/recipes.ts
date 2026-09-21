@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db, getSetting, nowIso } from '../db.js';
 import { actorFrom, logChange, type Actor } from '../context.js';
-import { badRequest, handler, idParam, notFound, parse, zDate } from '../http.js';
+import { badRequest, handler, idParam, notFound, parse, onlySupplied, zDate } from '../http.js';
 import type { MenuEntry, Recipe } from '../../shared/types.js';
 
 export const recipes = Router();
@@ -59,7 +59,7 @@ export function createRecipe(input: unknown, actor: Actor): Recipe {
 export function updateRecipe(id: number, input: unknown, actor: Actor): Recipe {
   const current = getRecipe(id);
   if (!current) throw notFound('Recipe not found');
-  const body = parse(recipeBody.partial(), input);
+  const body = onlySupplied(input, parse(recipeBody.partial(), input));
   const next = { ...current, ...body };
   db.prepare(`UPDATE recipes SET name=@name, description=@description, ingredients=@ingredients, instructions=@instructions,
               prep_minutes=@prep_minutes, tags=@tags, updated_at=@updated_at WHERE id=@id`)

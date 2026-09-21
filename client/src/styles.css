@@ -871,6 +871,109 @@ ul {
 .dashboard-order b {
   font-size: calc(14px * var(--text-scale));
 }
+.dashboard-order > .is-hidden,
+.overview-order > .is-hidden {
+  opacity: .55;
+}
+.settings-tabs {
+  margin-top: -4px;
+}
+
+/* ---------- Configurable project overview ---------- */
+.project-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.overview-slot.full {
+  grid-column: 1 / -1;
+}
+.overview-slot > .card {
+  height: 100%;
+}
+.project-overview-grid.compact {
+  gap: 12px;
+}
+.project-overview-grid.compact .card-head,
+.project-overview-grid.compact .card-body,
+.project-overview-grid.compact .rowitem,
+.project-overview-grid.compact .milestone-line,
+.project-overview-grid.compact .expense-row {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.overview-order {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.overview-order > div {
+  min-height: 50px;
+  padding: 6px 8px 6px 12px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: auto minmax(110px, 1fr) 122px repeat(3, 34px);
+  align-items: center;
+  gap: 7px;
+}
+.overview-order > div:first-child {
+  border-top: 0;
+}
+.overview-order b {
+  font-size: calc(13px * var(--text-scale));
+}
+.overview-order .select {
+  min-height: 34px;
+  padding: 6px 28px 6px 8px;
+  font-size: 12px;
+}
+.overview-budget {
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.overview-budget b {
+  font-size: calc(24px * var(--text-scale));
+}
+.overview-budget span {
+  color: var(--text-2);
+  font-size: calc(13px * var(--text-scale));
+}
+.overview-budget .progress {
+  grid-column: 1 / -1;
+}
+.overview-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+.overview-links a {
+  max-width: 220px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--primary);
+  font-size: 13px;
+}
+.overview-links svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+.overview-link-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, .65fr) auto;
+  gap: 7px;
+  margin-top: 10px;
+}
 
 /* ---------- Recipes & weekly menu ---------- */
 .menu-week {
@@ -1857,9 +1960,11 @@ ul {
   }
   .mobile-shop-button {
     position: relative;
-    margin-left: auto;
-    width: 38px;
-    height: 38px;
+    margin-left: 0;
+    width: 44px;
+    min-width: 44px;
+    height: 42px;
+    padding: 0;
     border-radius: 12px;
     background: var(--primary-soft);
     color: var(--primary);
@@ -1890,6 +1995,32 @@ ul {
   }
   .hide-mobile {
     display: none !important;
+  }
+  .settings-tabs {
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .project-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .overview-slot.half,
+  .overview-slot.full {
+    grid-column: 1;
+  }
+  .overview-order > div {
+    grid-template-columns: auto minmax(90px, 1fr) repeat(3, 34px);
+  }
+  .overview-order .select {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+  .overview-link-form {
+    grid-template-columns: 1fr auto;
+  }
+  .overview-link-form .input:nth-child(2) {
+    display: none;
   }
 }
 

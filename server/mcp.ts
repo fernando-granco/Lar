@@ -33,7 +33,7 @@ function run<T>(fn: () => T) {
   }
 }
 
-/** Resolve "Fernando", "kids", "everyone" into assignee ids. Unknown names throw. */
+/** Resolve a person, group, or "everyone" into assignee ids. Unknown names throw. */
 function resolveAssignees(names: string[] | undefined): Assignees {
   const out: Assignees = { member_ids: [], group_ids: [] };
   if (!names || !names.length) return out;
@@ -133,7 +133,7 @@ function compactItem(i: ShoppingItem, ms = memberNames(), gs = groupNames()) {
 const projectNames = () => new Map(queryProjects({ status: 'all', archived: false }).map((p) => [p.id, p.name]));
 
 const zDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD');
-const zNames = z.array(z.string()).optional().describe('People or group names, e.g. ["Fernando"] or ["Kids"]. Omit or empty = everyone.');
+const zNames = z.array(z.string()).optional().describe('People or group names, e.g. ["Alex"] or ["Kids"]. Omit or empty = everyone.');
 const addIsoDays = (iso: string, days: number) => {
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(Date.UTC(y!, m! - 1, d! + days));

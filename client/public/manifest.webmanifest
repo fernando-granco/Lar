@@ -1,7 +1,7 @@
 {
   "name": "Lar",
   "short_name": "Lar",
-  "description": "The family's home hub: shared to-dos, shopping lists, and home projects.",
+  "description": "The family's home hub: shared to-dos, shopping lists, projects, recipes, and weekly plans.",
   "id": "/",
   "start_url": "/today",
   "scope": "/",

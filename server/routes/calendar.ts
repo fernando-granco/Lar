@@ -4,7 +4,7 @@ import ical, { type VEvent, type CalendarResponse } from 'node-ical';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { db, getSetting, nowIso } from '../db.js';
-import { handler, parse, idParam, notFound, badRequest, zColor, zDate } from '../http.js';
+import { handler, parse, onlySupplied, idParam, notFound, badRequest, zColor, zDate } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { loadTasks, assignedToMemberSql, todayIso } from '../repo.js';
 import type { Calendar, CalendarEvent } from '../../shared/types.js';
@@ -159,7 +159,7 @@ calendar.patch(
     const id = idParam(req);
     const cur = getCalendar(id);
     if (!cur) throw notFound('Calendar not found');
-    const body = parse(calBody.partial(), req.body);
+    const body = onlySupplied(req.body, parse(calBody.partial(), req.body));
     db.prepare('UPDATE calendars SET name = ?, url = ?, color = ?, enabled = ? WHERE id = ?').run(body.name ?? cur.name, body.url ?? cur.url, body.color ?? cur.color, (body.enabled ?? cur.enabled) ? 1 : 0, id);
     if (body.url && body.url !== cur.url) cache.delete(cur.url);
     logChange(actorFrom(req), 'updated', 'household', id, `Updated calendar "${body.name ?? cur.name}"`);

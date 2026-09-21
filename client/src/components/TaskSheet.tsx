@@ -54,7 +54,7 @@ export function TaskSheet({
   task?: Task | null;
   initial?: Partial<Draft>;
   projects?: Project[];
-  fixedProject?: { id: number; milestones: Milestone[] };
+  fixedProject?: { id: number; milestones: Milestone[]; memberIds?: number[] };
   milestones?: Milestone[];
 }) {
   const { data: household } = useHousehold();
@@ -68,7 +68,7 @@ export function TaskSheet({
     if (task) {
       const { title, notes, priority, due_date, due_time, recurrence, project_id, milestone_id, assignees } = task;
       setDraft({ title, notes, priority, due_date, due_time, recurrence, project_id, milestone_id, assignees });
-    } else setDraft(blank({ project_id: fixedProject?.id ?? null, ...initial }));
+    } else setDraft(blank({ project_id: fixedProject?.id ?? null, assignees: fixedProject?.memberIds?.length ? { member_ids: fixedProject.memberIds, group_ids: [] } : { member_ids: [], group_ids: [] }, ...initial }));
     setError('');
   }, [open, task, initial, fixedProject?.id]);
 
@@ -129,7 +129,7 @@ export function TaskSheet({
             </div>
           </Field>
 
-          <Field label="For whom">
+          <Field label="For whom" hint={fixedProject?.memberIds?.length ? 'project members selected automatically' : undefined}>
             <AssigneePicker value={draft.assignees} onChange={(assignees) => set({ assignees })} members={household?.members ?? []} groups={household?.groups ?? []} />
           </Field>
 

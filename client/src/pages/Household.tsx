@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor, Lock, ChevronUp, ChevronDown, Type, ListChecks, Utensils, Baby } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, UserRound, Settings as SettingsIcon, Plug, Moon, Sun, Monitor, Lock, ChevronUp, ChevronDown, Type, ListChecks, Utensils, Baby, Eye, EyeOff, Activity as ActivityIcon, HardDrive } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useHousehold, useInvalidatingMutation } from '@/lib/hooks';
 import { usePrefs, setPrefs, applyTheme, applyTextSize, type CompletionMode, type DashboardSection, type TextSize } from '@/lib/store';
@@ -10,11 +10,15 @@ import type { Member, Group } from '@shared/types';
 import { CalendarsCard } from '@/components/CalendarsCard';
 import { BackupCard } from '@/components/BackupCard';
 import { InstallAppCard } from '@/components/InstallAppCard';
+import { ActivityCard } from '@/components/ActivityCard';
+
+type SettingsTab = 'family' | 'general' | 'display' | 'connections' | 'activity' | 'data';
 
 export function Household() {
   const { data } = useHousehold();
   const toast = useToast();
   const prefs = usePrefs();
+  const [section, setSection] = useState<SettingsTab>('family');
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [week, setWeek] = useState<'monday' | 'sunday'>('monday');
@@ -52,6 +56,17 @@ export function Household() {
     [next[from], next[to]] = [next[to]!, next[from]!];
     setPrefs({ dashboardOrder: next });
   };
+  const toggleDashboard = (key: DashboardSection) => {
+    setPrefs({ dashboardHidden: prefs.dashboardHidden.includes(key) ? prefs.dashboardHidden.filter((item) => item !== key) : [...prefs.dashboardHidden, key] });
+  };
+  const settingsTabs: { key: SettingsTab; label: string; icon: typeof Users }[] = [
+    { key: 'family', label: 'Family', icon: Users },
+    { key: 'general', label: 'General', icon: SettingsIcon },
+    { key: 'display', label: 'Display', icon: Type },
+    { key: 'connections', label: 'Connections', icon: Plug },
+    { key: 'activity', label: 'Activity', icon: ActivityIcon },
+    { key: 'data', label: 'Data', icon: HardDrive },
+  ];
 
   return (
     <div className="page">
@@ -62,7 +77,15 @@ export function Household() {
         </div>
       </header>
 
-      <div className="grid-2">
+      <div className="tabs settings-tabs" role="tablist" aria-label="Household settings">
+        {settingsTabs.map((item) => (
+          <button key={item.key} type="button" role="tab" aria-selected={section === item.key} className={section === item.key ? 'on' : ''} onClick={() => setSection(item.key)}>
+            <item.icon size={15} /> {item.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'family' && <div className="grid-2">
         <Card title="People" icon={UserRound} flush action={!me?.is_kid ? <Button size="sm" icon={Plus} onClick={() => setMemberSheet('new')}>Add person</Button> : undefined}>
           <div className="list">
             {data?.members.map((m) => (
@@ -106,9 +129,9 @@ export function Household() {
             <Empty icon={Users} title="No groups yet" hint='Groups like "Kids" or "Adults" make assigning things quick.' />
           )}
         </Card>
-      </div>
+      </div>}
 
-      <div className="grid-2">
+      {section === 'general' && (
         <Card title="Settings" icon={SettingsIcon}>
           <div className="form">
             <Field label="Household name">
@@ -151,7 +174,9 @@ export function Household() {
             </div>
           </div>
         </Card>
+      )}
 
+      {section === 'connections' && (
         <Card title="Agents & API" icon={Plug}>
           <div className="stack" style={{ gap: 14 }}>
             <div>
@@ -169,9 +194,9 @@ export function Household() {
             </div>
           </div>
         </Card>
-      </div>
+      )}
 
-      <Card title="Display & behaviour" icon={Type}>
+      {section === 'display' && <Card title="Display & behaviour" icon={Type}>
         <div className="settings-columns">
           <div className="form">
             <Field label="Text size" hint="this device">
@@ -225,10 +250,11 @@ export function Household() {
               <span>Today dashboard order <em>this device</em></span>
               <div className="dashboard-order">
                 {visibleDashboard.map((key, index) => (
-                  <div key={key}>
+                  <div key={key} className={prefs.dashboardHidden.includes(key) ? 'is-hidden' : ''}>
                     <ListChecks size={16} className="faint" />
                     <b>{dashboardLabels[key]}</b>
                     <div className="right row" style={{ gap: 2 }}>
+                      <IconButton icon={prefs.dashboardHidden.includes(key) ? EyeOff : Eye} label={`${prefs.dashboardHidden.includes(key) ? 'Show' : 'Hide'} ${dashboardLabels[key]}`} onClick={() => toggleDashboard(key)} />
                       <IconButton icon={ChevronUp} label={`Move ${dashboardLabels[key]} up`} disabled={index === 0} onClick={() => moveDashboard(key, -1)} />
                       <IconButton icon={ChevronDown} label={`Move ${dashboardLabels[key]} down`} disabled={index === visibleDashboard.length - 1} onClick={() => moveDashboard(key, 1)} />
                     </div>
@@ -238,11 +264,11 @@ export function Household() {
             </div>
           </div>
         </div>
-      </Card>
+      </Card>}
 
-      <InstallAppCard />
-      <CalendarsCard />
-      <BackupCard />
+      {section === 'connections' && <><InstallAppCard /><CalendarsCard /></>}
+      {section === 'activity' && <ActivityCard />}
+      {section === 'data' && <BackupCard />}
 
       <MemberSheet open={memberSheet !== null} member={memberSheet === 'new' ? null : memberSheet} onClose={() => setMemberSheet(null)} />
       <GroupSheet open={groupSheet !== null} group={groupSheet === 'new' ? null : groupSheet} members={data?.members ?? []} onClose={() => setGroupSheet(null)} />

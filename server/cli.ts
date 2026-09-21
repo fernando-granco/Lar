@@ -1,6 +1,6 @@
 /**
  * Small admin CLI, run inside the container:
- *   docker exec lar node dist/server/cli.js reset-password Fernando
+ *   docker exec lar node dist/server/cli.js reset-password Alex
  *   docker exec lar node dist/server/cli.js list-members
  */
 import { db } from './db.js';

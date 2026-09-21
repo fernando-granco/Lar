@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, getSetting, setSetting } from '../db.js';
-import { handler, parse, idParam, notFound, badRequest, HttpError, zColor, zIdList } from '../http.js';
+import { handler, parse, onlySupplied, idParam, notFound, badRequest, HttpError, zColor, zIdList } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { listMembers, listGroups, getMember } from '../repo.js';
 import { cfAccessEmail } from '../auth.js';
@@ -92,7 +92,7 @@ household.patch(
     const id = idParam(req);
     const current = getMember(id);
     if (!current) throw notFound('Member not found');
-    const body = parse(memberBody.partial().extend({ archived: z.boolean().optional(), sort_order: z.number().int().optional() }), req.body);
+    const body = onlySupplied(req.body, parse(memberBody.partial().extend({ archived: z.boolean().optional(), sort_order: z.number().int().optional() }), req.body));
     const kid = kidActor(req);
     if (kid && body.is_kid !== undefined && body.is_kid !== current.is_kid) throw new HttpError(403, 'Kid profiles cannot change family permission levels.');
     db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ?, email = ?, is_kid = ? WHERE id = ?').run(
@@ -169,7 +169,7 @@ household.patch(
     const id = idParam(req);
     const current = listGroups().find((g) => g.id === id);
     if (!current) throw notFound('Group not found');
-    const body = parse(groupBody.partial(), req.body);
+    const body = onlySupplied(req.body, parse(groupBody.partial(), req.body));
     db.prepare('UPDATE groups SET name = ?, color = ? WHERE id = ?').run(body.name ?? current.name, body.color ?? current.color, id);
     if (body.member_ids) setGroupMembers(id, body.member_ids);
     logChange(actorFrom(req), 'updated', 'household', id, `Updated group ${body.name ?? current.name}`);

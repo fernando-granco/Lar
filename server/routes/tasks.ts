@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, nowIso } from '../db.js';
-import { handler, parse, idParam, notFound, badRequest, zDate, zTime, zAssignees, zIdList } from '../http.js';
+import { handler, parse, onlySupplied, idParam, notFound, badRequest, zDate, zTime, zAssignees, zIdList } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { loadTasks, getTask, setAssignees, assignedToMemberSql, nextDueDate, todayIso } from '../repo.js';
 import type { Task } from '../../shared/types.js';
@@ -124,7 +124,7 @@ tasks.post(
 export function updateTask(id: number, input: unknown, actor: ReturnType<typeof actorFrom>): Task {
   const current = getTask(id);
   if (!current) throw notFound('Task not found');
-  const body = parse(taskBody.partial().extend({ status: z.enum(['open', 'done']).optional() }), input);
+  const body = onlySupplied(input, parse(taskBody.partial().extend({ status: z.enum(['open', 'done']).optional() }), input));
   const next = { ...current, ...body, assignees: body.assignees ?? current.assignees };
   if (body.status && body.status !== current.status) return setDone(id, body.status === 'done', actor);
   db.prepare(

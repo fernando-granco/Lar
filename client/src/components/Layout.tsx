@@ -4,7 +4,6 @@ import { Sun, CheckSquare, ShoppingBasket, Hammer, Settings, UserRound, Chevrons
 import { useHousehold, useSummary, useCurrentMember } from '@/lib/hooks';
 import { Avatar } from './ui';
 import { MemberPicker } from './MemberPicker';
-import { MobileQuickShopping } from './MobileQuickShopping';
 
 export function BrandMark() {
   return <img className="brand-mark" src="/lar.png" alt="" width={30} height={30} aria-hidden />;
@@ -69,8 +68,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <BrandMark />
           {name}
         </Link>
-        <MobileQuickShopping />
-        <button type="button" style={{ display: 'flex' }} onClick={() => setPickerOpen(true)} aria-label="Choose who you are">
+        <button type="button" style={{ display: 'flex', marginLeft: 'auto' }} onClick={() => setPickerOpen(true)} aria-label="Choose who you are">
           {me ? (
             <Avatar member={me} />
           ) : (

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Pencil, Trash2, Flag, CheckSquare, ShoppingBasket, Wallet, StickyNote, Link2, CalendarDays, Sparkles, Archive, ExternalLink, Milestone as MilestoneIcon, Receipt, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, Flag, CheckSquare, ShoppingBasket, Wallet, StickyNote, Link2, CalendarDays, Sparkles, Archive, ExternalLink, Milestone as MilestoneIcon, Receipt, MoreHorizontal, SlidersHorizontal, Eye, EyeOff, ChevronUp, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
 import { keys, useHousehold, useInvalidatingMutation } from '@/lib/hooks';
 import { friendlyDate, money, PROJECT_STATUS, daysUntil, dueTone, today } from '@/lib/format';
 import { parseShoppingText, parseTaskText } from '@shared/parse';
-import { Card, Button, Empty, Progress, Badge, CheckBox, Field, Input, TextArea, Avatar, IconButton, cx } from '@/components/ui';
+import { Card, Button, Empty, Progress, Badge, CheckBox, Field, Input, TextArea, Avatar, IconButton, Select, Segmented, cx } from '@/components/ui';
 import { Sheet, Confirm } from '@/components/Sheet';
 import { ProjectSheet } from '@/components/ProjectSheet';
 import { ProjectIcon } from '@/components/ProjectIcon';
@@ -16,6 +16,7 @@ import { ShoppingRow } from '@/components/ShoppingRow';
 import { ShoppingItemSheet } from '@/components/ShoppingItemSheet';
 import { useToast } from '@/components/Toast';
 import type { ProjectDetail as PD, Milestone, Expense, Task, ShoppingItem } from '@shared/types';
+import { setPrefs, usePrefs, type ProjectOverviewDensity, type ProjectOverviewSection, type ProjectOverviewWidth } from '@/lib/store';
 
 type Tab = 'overview' | 'milestones' | 'todos' | 'shopping' | 'budget' | 'notes';
 
@@ -48,6 +49,7 @@ export function ProjectDetail() {
   const pct = p.task_count ? Math.round((p.task_done_count / p.task_count) * 100) : p.milestone_count ? Math.round((p.milestone_done_count / p.milestone_count) * 100) : 0;
   const days = p.target_date ? daysUntil(p.target_date) : null;
   const owner = household?.members.find((m) => m.id === p.owner_id);
+  const participantIds = [...new Set([...(p.owner_id ? [p.owner_id] : []), ...p.member_ids])];
   const openTasks = p.tasks.filter((t) => t.status === 'open');
   const openItems = p.shopping_items.filter((i) => !i.checked_at);
 
@@ -117,10 +119,10 @@ export function ProjectDetail() {
         ))}
       </div>
 
-      {tab === 'overview' && <Overview p={p} owner={owner} currency={currency} goTo={setTab} />}
+      {tab === 'overview' && <Overview p={p} owner={owner} currency={currency} participantIds={participantIds} goTo={setTab} onEditProject={() => setEditing(true)} />}
       {tab === 'milestones' && <Milestones p={p} />}
-      {tab === 'todos' && <ProjectTodos p={p} />}
-      {tab === 'shopping' && <ProjectShopping p={p} currency={currency} />}
+      {tab === 'todos' && <ProjectTodos p={p} participantIds={participantIds} />}
+      {tab === 'shopping' && <ProjectShopping p={p} currency={currency} participantIds={participantIds} />}
       {tab === 'budget' && <Budget p={p} currency={currency} onEditBudget={() => setEditing(true)} />}
       {tab === 'notes' && <Notes p={p} />}
 
@@ -142,61 +144,148 @@ export function ProjectDetail() {
 
 // ---------------- Overview ----------------
 
-function Overview({ p, owner, currency, goTo }: { p: PD; owner?: { name: string; color: string; initials: string }; currency: string; goTo: (t: Tab) => void }) {
+const OVERVIEW_META: Record<ProjectOverviewSection, { label: string; icon: typeof Flag }> = {
+  details: { label: 'Details', icon: Flag },
+  milestones: { label: 'Milestones', icon: MilestoneIcon },
+  todos: { label: 'To-dos', icon: CheckSquare },
+  shopping: { label: 'Shopping list', icon: ShoppingBasket },
+  budget: { label: 'Budget & expenses', icon: Wallet },
+  notes: { label: 'Notes & links', icon: StickyNote },
+};
+
+function Overview({ p, owner, currency, participantIds, goTo, onEditProject }: { p: PD; owner?: { name: string; color: string; initials: string }; currency: string; participantIds: number[]; goTo: (t: Tab) => void; onEditProject: () => void }) {
   const { data: household } = useHousehold();
-  const members = household?.members.filter((m) => p.member_ids.includes(m.id)) ?? [];
-  const nextMs = p.milestones.filter((m) => !m.done_at).slice(0, 3);
-  const nextTasks = p.tasks.filter((t) => t.status === 'open').slice(0, 5);
-  const [editTask, setEditTask] = useState<Task | null>(null);
+  const prefs = usePrefs();
+  const toast = useToast();
+  const members = household?.members.filter((m) => participantIds.includes(m.id) && m.id !== p.owner_id) ?? [];
+  const limit = prefs.projectOverviewDensity === 'compact' ? 2 : 5;
+  const nextMs = p.milestones.filter((m) => !m.done_at).slice(0, limit);
+  const nextTasks = p.tasks.filter((t) => t.status === 'open').slice(0, limit);
+  const nextItems = p.shopping_items.filter((item) => !item.checked_at).slice(0, limit);
+  const recentExpenses = p.expenses.slice(0, limit);
+  const [customize, setCustomize] = useState(false);
+  const [editTask, setEditTask] = useState<Task | 'new' | null>(null);
+  const [editItem, setEditItem] = useState<ShoppingItem | 'new' | null>(null);
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [milestoneOpen, setMilestoneOpen] = useState(false);
+  const [milestoneTitle, setMilestoneTitle] = useState('');
+  const [milestoneDue, setMilestoneDue] = useState('');
+  const [milestoneDescription, setMilestoneDescription] = useState('');
+  const addMilestone = useInvalidatingMutation(() => api.createMilestone(p.id, { title: milestoneTitle.trim(), due_date: milestoneDue || null, description: milestoneDescription }), ['project', 'projects']);
+  const [notes, setNotes] = useState(p.notes);
+  const [notesSaved, setNotesSaved] = useState(true);
+  const notesTimer = useRef<number>(undefined);
+  const saveNotes = useInvalidatingMutation((value: string) => api.updateProject(p.id, { notes: value }), ['project']);
+  const [linkLabel, setLinkLabel] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const addLink = useInvalidatingMutation(() => api.createLink(p.id, { label: linkLabel.trim() || hostOf(linkUrl), url: linkUrl.trim() }), ['project']);
+
+  useEffect(() => {
+    setNotes(p.notes);
+    setNotesSaved(true);
+  }, [p.id, p.notes]);
+
+  const updateNotes = (value: string) => {
+    setNotes(value);
+    setNotesSaved(false);
+    window.clearTimeout(notesTimer.current);
+    notesTimer.current = window.setTimeout(async () => {
+      await saveNotes.mutateAsync(value);
+      setNotesSaved(true);
+    }, 800);
+  };
+  const flushNotes = async () => {
+    if (notesSaved) return;
+    window.clearTimeout(notesTimer.current);
+    await saveNotes.mutateAsync(notes);
+    setNotesSaved(true);
+  };
+  const moveOverview = (key: ProjectOverviewSection, direction: -1 | 1) => {
+    const next = [...prefs.projectOverviewOrder];
+    const from = next.indexOf(key);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= next.length) return;
+    [next[from], next[to]] = [next[to]!, next[from]!];
+    setPrefs({ projectOverviewOrder: next });
+  };
+  const toggleOverview = (key: ProjectOverviewSection) => setPrefs({ projectOverviewHidden: prefs.projectOverviewHidden.includes(key) ? prefs.projectOverviewHidden.filter((item) => item !== key) : [...prefs.projectOverviewHidden, key] });
+  const setOverviewWidth = (key: ProjectOverviewSection, width: ProjectOverviewWidth) => setPrefs({ projectOverviewWidths: { ...prefs.projectOverviewWidths, [key]: width } });
+
+  const actionPair = (add: () => void, all: () => void, addLabel: string) => (
+    <div className="row" style={{ gap: 3 }}>
+      <Button size="sm" variant="ghost" icon={Plus} onClick={add}>{addLabel}</Button>
+      <Button size="sm" variant="ghost" onClick={all}>All</Button>
+    </div>
+  );
+
+  const renderSection = (key: ProjectOverviewSection) => {
+    if (key === 'details') return (
+      <Card title="Details" icon={Flag} action={<Button size="sm" variant="ghost" icon={Pencil} onClick={onEditProject}>Edit</Button>}>
+        <dl className="kv">
+          <dt>Owner</dt>
+          <dd>{owner ? <span className="row" style={{ gap: 6 }}><Avatar member={owner} size="sm" /> {owner.name}</span> : <span className="faint">Nobody yet</span>}</dd>
+          <dt>Involved</dt>
+          <dd>{members.length ? <span className="row wrap" style={{ gap: 6 }}>{members.map((member) => <span key={member.id} className="row" style={{ gap: 4 }}><Avatar member={member} size="sm" /> {member.name}</span>)}</span> : <span className="faint">Just the owner</span>}</dd>
+          <dt>Timeline</dt>
+          <dd>{p.start_date || p.target_date ? `${p.start_date ? friendlyDate(p.start_date, { relative: false }) : '…'} → ${p.target_date ? friendlyDate(p.target_date, { relative: false }) : '…'}` : <span className="faint">No dates yet</span>}</dd>
+          <dt>Budget</dt>
+          <dd>{p.budget !== null ? `${money(p.spent, currency)} spent of ${money(p.budget, currency)}` : p.spent ? `${money(p.spent, currency)} spent` : <span className="faint">Not set</span>}</dd>
+        </dl>
+      </Card>
+    );
+    if (key === 'milestones') return (
+      <Card title="Next milestones" icon={MilestoneIcon} flush action={actionPair(() => setMilestoneOpen(true), () => goTo('milestones'), 'Add')}>
+        {nextMs.length ? <div className="list">{nextMs.map((milestone) => <div key={milestone.id} className="milestone-line" onClick={() => goTo('milestones')}><div className="rail"><span className="check round" /></div><div className="body"><div className="title">{milestone.title}</div>{milestone.due_date && <div className={cx('sub', dueTone(milestone.due_date) === 'overdue' && 'error')}>{friendlyDate(milestone.due_date)}</div>}</div></div>)}</div> : <Empty icon={MilestoneIcon} title={p.milestones.length ? 'All milestones reached' : 'No milestones yet'} />}
+      </Card>
+    );
+    if (key === 'todos') return (
+      <Card title="Up next" icon={CheckSquare} flush action={actionPair(() => setEditTask('new'), () => goTo('todos'), 'Add')}>
+        {nextTasks.length ? <div className="list">{nextTasks.map((task) => <TaskRow key={task.id} task={task} onOpen={setEditTask} />)}</div> : <Empty icon={CheckSquare} title="No open to-dos" hint="Add the next concrete step." />}
+      </Card>
+    );
+    if (key === 'shopping') return (
+      <Card title="Shopping list" icon={ShoppingBasket} flush action={actionPair(() => setEditItem('new'), () => goTo('shopping'), 'Add')}>
+        {nextItems.length ? <div className="list">{nextItems.map((item) => <ShoppingRow key={item.id} item={item} onOpen={setEditItem} />)}</div> : <Empty icon={ShoppingBasket} title="Nothing to buy" hint="Add materials, parts, or tools for this project." />}
+      </Card>
+    );
+    if (key === 'budget') return (
+      <Card title="Budget & expenses" icon={Wallet} flush action={actionPair(() => setExpenseOpen(true), () => goTo('budget'), 'Expense')}>
+        <div className="overview-budget"><b>{money(p.spent, currency)}</b><span>{p.budget !== null ? `of ${money(p.budget, currency)} budget` : 'spent · no budget set'}</span>{p.budget !== null && <Progress value={p.spent} max={p.budget} tone={p.spent > p.budget ? 'over' : undefined} />}</div>
+        {!!recentExpenses.length && <div className="list">{recentExpenses.map((expense) => <div key={expense.id} className="expense-row"><div className="title">{expense.title}</div><div className="amount">{money(expense.amount, currency)}</div><div className="sub">{friendlyDate(expense.date, { relative: false })}</div></div>)}</div>}
+      </Card>
+    );
+    return (
+      <Card title="Notes & links" icon={StickyNote} action={<span className="faint" style={{ fontSize: 12 }}>{notesSaved ? 'Saved' : 'Saving…'}</span>}>
+        <TextArea value={notes} onChange={(event) => updateNotes(event.target.value)} onBlur={() => void flushNotes()} placeholder="Add project notes…" style={{ minHeight: prefs.projectOverviewDensity === 'compact' ? 80 : 130 }} />
+        {!!p.links.length && <div className="overview-links">{p.links.slice(0, limit).map((link) => <a key={link.id} href={link.url} target="_blank" rel="noreferrer"><ExternalLink /> <span className="truncate">{link.label}</span></a>)}</div>}
+        <form className="overview-link-form" onSubmit={async (event) => { event.preventDefault(); if (!/^https?:\/\//i.test(linkUrl.trim())) return toast('Links need to start with http:// or https://'); await addLink.mutateAsync(undefined as never); setLinkLabel(''); setLinkUrl(''); toast('Link added'); }}>
+          <Input value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://…" inputMode="url" />
+          {prefs.projectOverviewDensity === 'comfortable' && <Input value={linkLabel} onChange={(event) => setLinkLabel(event.target.value)} placeholder="Link label" />}
+          <Button size="sm" variant="secondary" type="submit" icon={Plus} disabled={!linkUrl.trim()}>Link</Button>
+        </form>
+      </Card>
+    );
+  };
+
   return (
     <>
-      <div className="grid-2">
-        <Card title="Details" icon={Flag}>
-          <dl className="kv">
-            <dt>Owner</dt>
-            <dd>{owner ? <span className="row" style={{ gap: 6 }}><Avatar member={owner} size="sm" /> {owner.name}</span> : <span className="faint">Nobody yet</span>}</dd>
-            <dt>Involved</dt>
-            <dd>{members.length ? <span className="row wrap" style={{ gap: 6 }}>{members.map((m) => <span key={m.id} className="row" style={{ gap: 4 }}><Avatar member={m} size="sm" /> {m.name}</span>)}</span> : <span className="faint">Just the owner</span>}</dd>
-            <dt>Timeline</dt>
-            <dd>{p.start_date || p.target_date ? `${p.start_date ? friendlyDate(p.start_date, { relative: false }) : '…'} → ${p.target_date ? friendlyDate(p.target_date, { relative: false }) : '…'}` : <span className="faint">No dates yet</span>}</dd>
-            <dt>Budget</dt>
-            <dd>{p.budget !== null ? `${money(p.spent, currency)} spent of ${money(p.budget, currency)}` : p.spent ? `${money(p.spent, currency)} spent` : <span className="faint">Not set</span>}</dd>
-            {p.completed_at && (<><dt>Completed</dt><dd>{friendlyDate(p.completed_at.slice(0, 10), { relative: false })}</dd></>)}
-          </dl>
-        </Card>
-        <Card title="Next milestones" icon={MilestoneIcon} flush action={<Button size="sm" variant="ghost" onClick={() => goTo('milestones')}>All</Button>}>
-          {nextMs.length ? (
-            <div className="list">
-              {nextMs.map((m) => (
-                <div key={m.id} className="milestone-line" onClick={() => goTo('milestones')}>
-                  <div className="rail"><span className="check round" style={{ pointerEvents: 'none' }} /></div>
-                  <div className="body">
-                    <div className="title">{m.title}</div>
-                    {m.due_date && <div className={cx('sub', dueTone(m.due_date) === 'overdue' && 'error')}>{friendlyDate(m.due_date)}</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty icon={MilestoneIcon} title={p.milestones.length ? 'All milestones reached' : 'No milestones yet'} hint={p.milestones.length ? undefined : 'Break the project into a few big steps.'} />
-          )}
-        </Card>
+      <div className="row" style={{ justifyContent: 'flex-end' }}><Button size="sm" variant="secondary" icon={SlidersHorizontal} onClick={() => setCustomize(true)}>Customize overview</Button></div>
+      <div className={cx('project-overview-grid', prefs.projectOverviewDensity === 'compact' && 'compact')}>
+        {prefs.projectOverviewOrder.filter((key) => !prefs.projectOverviewHidden.includes(key)).map((key) => <div key={key} className={cx('overview-slot', prefs.projectOverviewWidths[key])}>{renderSection(key)}</div>)}
       </div>
-      <Card title="Up next" icon={CheckSquare} flush action={<Button size="sm" variant="ghost" onClick={() => goTo('todos')}>All to-dos</Button>}>
-        {nextTasks.length ? <div className="list">{nextTasks.map((t) => <TaskRow key={t.id} task={t} onOpen={setEditTask} />)}</div> : <Empty icon={CheckSquare} title="No open to-dos" hint="Add the next concrete step." />}
-      </Card>
-      {p.links.length > 0 && (
-        <Card title="Links" icon={Link2} flush>
-          <div className="list">
-            {p.links.map((l) => (
-              <a key={l.id} className="link-row" href={l.url} target="_blank" rel="noreferrer">
-                <ExternalLink /> <span className="grow truncate">{l.label}</span> <span className="faint mono truncate" style={{ maxWidth: 220 }}>{hostOf(l.url)}</span>
-              </a>
-            ))}
-          </div>
-        </Card>
-      )}
-      <TaskSheet open={editTask !== null} onClose={() => setEditTask(null)} task={editTask} fixedProject={{ id: p.id, milestones: p.milestones }} />
+
+      <Sheet open={customize} onClose={() => setCustomize(false)} title="Customize project overview">
+        <div className="form">
+          <Field label="Card detail" hint="this device"><Segmented<ProjectOverviewDensity> value={prefs.projectOverviewDensity} onChange={(projectOverviewDensity) => setPrefs({ projectOverviewDensity })} options={[{ value: 'compact', label: 'Compact' }, { value: 'comfortable', label: 'Comfortable' }]} /></Field>
+          <div className="field"><span>Cards, order, and width <em>this device</em></span><div className="overview-order">{prefs.projectOverviewOrder.map((key, index) => { const hidden = prefs.projectOverviewHidden.includes(key); const Icon = OVERVIEW_META[key].icon; return <div key={key} className={hidden ? 'is-hidden' : ''}><Icon size={16} className="faint" /><b>{OVERVIEW_META[key].label}</b><Select aria-label={`${OVERVIEW_META[key].label} width`} value={prefs.projectOverviewWidths[key]} onChange={(event) => setOverviewWidth(key, event.target.value as ProjectOverviewWidth)}><option value="half">Half width</option><option value="full">Full width</option></Select><IconButton icon={hidden ? EyeOff : Eye} label={`${hidden ? 'Show' : 'Hide'} ${OVERVIEW_META[key].label}`} onClick={() => toggleOverview(key)} /><IconButton icon={ChevronUp} label={`Move ${OVERVIEW_META[key].label} up`} disabled={index === 0} onClick={() => moveOverview(key, -1)} /><IconButton icon={ChevronDown} label={`Move ${OVERVIEW_META[key].label} down`} disabled={index === prefs.projectOverviewOrder.length - 1} onClick={() => moveOverview(key, 1)} /></div>; })}</div></div>
+        </div>
+      </Sheet>
+      <Sheet open={milestoneOpen} onClose={() => setMilestoneOpen(false)} title="New milestone" footer={<Button variant="primary" className="right" disabled={!milestoneTitle.trim() || addMilestone.isPending} onClick={async () => { await addMilestone.mutateAsync(undefined as never); setMilestoneTitle(''); setMilestoneDue(''); setMilestoneDescription(''); setMilestoneOpen(false); toast('Milestone added'); }}>Add milestone</Button>}>
+        <div className="form"><Field label="Milestone"><Input autoFocus value={milestoneTitle} onChange={(event) => setMilestoneTitle(event.target.value)} /></Field><Field label="Target date" hint="optional"><Input type="date" value={milestoneDue} onChange={(event) => setMilestoneDue(event.target.value)} /></Field><Field label="Description" hint="optional"><TextArea value={milestoneDescription} onChange={(event) => setMilestoneDescription(event.target.value)} /></Field></div>
+      </Sheet>
+      <TaskSheet open={editTask !== null} onClose={() => setEditTask(null)} task={editTask === 'new' ? null : editTask} fixedProject={{ id: p.id, milestones: p.milestones, memberIds: participantIds }} />
+      <ShoppingItemSheet open={editItem !== null} onClose={() => setEditItem(null)} item={editItem === 'new' ? null : editItem} listId={p.shopping_list.id} defaultMemberIds={participantIds} />
+      <ExpenseSheet open={expenseOpen} onClose={() => setExpenseOpen(false)} projectId={p.id} currency={currency} />
     </>
   );
 }
@@ -265,12 +354,12 @@ function Milestones({ p }: { p: PD }) {
 
 // ---------------- To-dos ----------------
 
-function ProjectTodos({ p }: { p: PD }) {
+function ProjectTodos({ p, participantIds }: { p: PD; participantIds: number[] }) {
   const [edit, setEdit] = useState<Task | null | 'new'>(null);
   const [quick, setQuick] = useState('');
   const create = useInvalidatingMutation((text: string) => {
     const parsed = parseTaskText(text);
-    return api.createTask({ title: parsed.title, due_date: parsed.due_date, priority: parsed.priority ?? 'normal', project_id: p.id });
+    return api.createTask({ title: parsed.title, due_date: parsed.due_date, priority: parsed.priority ?? 'normal', project_id: p.id, assignees: participantIds.length ? { member_ids: participantIds, group_ids: [] } : undefined });
   }, ['project', 'projects', 'tasks', 'summary']);
   const clearDone = useInvalidatingMutation(() => api.clearCompletedTasks(p.id), ['project', 'projects', 'tasks']);
   const open = p.tasks.filter((t) => t.status === 'open');
@@ -310,21 +399,21 @@ function ProjectTodos({ p }: { p: PD }) {
           </div>
         )}
       </Card>
-      <TaskSheet open={edit !== null} onClose={() => setEdit(null)} task={edit === 'new' ? null : edit} fixedProject={{ id: p.id, milestones: p.milestones }} />
+      <TaskSheet open={edit !== null} onClose={() => setEdit(null)} task={edit === 'new' ? null : edit} fixedProject={{ id: p.id, milestones: p.milestones, memberIds: participantIds }} />
     </>
   );
 }
 
 // ---------------- Shopping ----------------
 
-function ProjectShopping({ p, currency }: { p: PD; currency: string }) {
+function ProjectShopping({ p, currency, participantIds }: { p: PD; currency: string; participantIds: number[] }) {
   const toast = useToast();
   const [edit, setEdit] = useState<ShoppingItem | null | 'new'>(null);
   const [quick, setQuick] = useState('');
   const [expenseFrom, setExpenseFrom] = useState<ShoppingItem | null>(null);
   const create = useInvalidatingMutation((text: string) => {
     const parsed = parseShoppingText(text);
-    return api.createShoppingItem({ list_id: p.shopping_list.id, ...parsed, priority: parsed.priority ?? 'normal' });
+    return api.createShoppingItem({ list_id: p.shopping_list.id, ...parsed, priority: parsed.priority ?? 'normal', assignees: participantIds.length ? { member_ids: participantIds, group_ids: [] } : undefined });
   }, ['project', 'projects', 'shopping']);
   const clear = useInvalidatingMutation(() => api.clearChecked(p.shopping_list.id), ['project', 'projects', 'shopping']);
   const open = p.shopping_items.filter((i) => !i.checked_at);
@@ -356,7 +445,7 @@ function ProjectShopping({ p, currency }: { p: PD; currency: string }) {
           </div>
         )}
       </Card>
-      <ShoppingItemSheet open={edit !== null} onClose={() => setEdit(null)} item={edit === 'new' ? null : edit} listId={p.shopping_list.id} />
+      <ShoppingItemSheet open={edit !== null} onClose={() => setEdit(null)} item={edit === 'new' ? null : edit} listId={p.shopping_list.id} defaultMemberIds={participantIds} />
       <ExpenseSheet
         open={expenseFrom !== null}
         onClose={() => setExpenseFrom(null)}

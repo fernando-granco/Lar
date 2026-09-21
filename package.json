@@ -5,6 +5,14 @@
   "type": "module",
   "description": "Lar. The family's home hub: self-hosted to-dos, shopping lists, and home projects.",
   "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fernando-granco/Lar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fernando-granco/Lar/issues"
+  },
+  "homepage": "https://github.com/fernando-granco/Lar#readme",
   "engines": {
     "node": ">=20"
   },
