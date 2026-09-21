@@ -3,8 +3,15 @@ import { db } from '../db.js';
 import { handler, badRequest } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { todayIso } from '../repo.js';
+import { requireHousehold } from '../auth.js';
 
 export const backup = Router();
+
+// A backup contains every password hash and private calendar link in the
+// household, and a restore replaces the whole database — including
+// everyone's passwords. Both need an adult who has picked themselves on
+// this device (or the agent key), not just anyone who can reach the server.
+const requireAdult = requireHousehold({ allowKid: false });
 
 /** Tables in dependency order, so a restore can insert top to bottom and delete bottom to top. */
 const TABLES = [
@@ -39,6 +46,7 @@ export function exportAll() {
 
 backup.get(
   '/backup',
+  requireAdult,
   handler((_req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="lar-backup-${todayIso()}.json"`);
     return exportAll();
@@ -47,6 +55,7 @@ backup.get(
 
 backup.post(
   '/restore',
+  requireAdult,
   json({ limit: '50mb' }),
   handler((req) => {
     const data = req.body as { app?: string; version?: number; tables?: Record<string, unknown[]> };

@@ -10,13 +10,19 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+/** Headers that tell the server who this device is, the same way every `api.*` call does. */
+export function identityHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
   const member = getCurrentMemberId();
   if (member) headers['X-Lar-Member'] = String(member);
   const unlock = getUnlockToken();
   if (unlock) headers['X-Lar-Unlock'] = unlock;
+  return headers;
+}
+
+async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json', ...identityHeaders() };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(`/api/v1${url}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
@@ -125,3 +131,24 @@ export const api = {
   summary: () => get<Summary>('/summary'),
   activity: (p: { limit?: number; entity?: string; entity_id?: number } = {}) => get<Activity[]>(`/activity${qs(p)}`),
 };
+
+/**
+ * Backup and restore are not plain JSON round-trips (a file download, a
+ * file upload) so they bypass `request()` — but they still need to say who
+ * is asking, since the server now requires an adult in the household.
+ */
+export async function downloadBackup(): Promise<Blob> {
+  const res = await fetch('/api/v1/backup', { headers: identityHeaders() });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, data.error || res.statusText, data.details);
+  }
+  return res.blob();
+}
+
+export async function restoreBackup(json: string): Promise<{ restored: Record<string, number> }> {
+  const res = await fetch('/api/v1/restore', { method: 'POST', headers: { 'Content-Type': 'application/json', ...identityHeaders() }, body: json });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.error || res.statusText, data.details);
+  return data;
+}

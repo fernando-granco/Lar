@@ -3,10 +3,11 @@ import { z } from 'zod';
 import ical, { type VEvent, type CalendarResponse } from 'node-ical';
 import dns from 'node:dns/promises';
 import net from 'node:net';
-import { db, getSetting, nowIso } from '../db.js';
+import { db, getSetting, setSetting, nowIso } from '../db.js';
 import { handler, parse, onlySupplied, idParam, notFound, badRequest, zColor, zDate } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { loadTasks, assignedToMemberSql, todayIso } from '../repo.js';
+import { requireHousehold } from '../auth.js';
 import type { Calendar, CalendarEvent } from '../../shared/types.js';
 
 export const calendar = Router();
@@ -101,13 +102,17 @@ export function feedHandler(req: import('express').Request, res: import('express
   res.send(buildFeed(member && Number.isInteger(member) ? member : undefined));
 }
 
-calendar.get('/calendar/feed-info', handler(() => ({ token: getSetting('feed_token'), path: '/calendar/lar.ics' })));
+// The feed link is a bearer secret (anyone who has it can read the whole
+// household's schedule), so reading or rotating it needs to be someone on
+// the household, not just anyone who can reach the server.
+calendar.get('/calendar/feed-info', requireHousehold({ allowKid: true }), handler(() => ({ token: getSetting('feed_token'), path: '/calendar/lar.ics' })));
 
 calendar.post(
   '/calendar/feed-token/rotate',
+  requireHousehold({ allowKid: true }),
   handler((req) => {
     const token = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('');
-    db.prepare("UPDATE settings SET value = ? WHERE key = 'feed_token'").run(token);
+    setSetting('feed_token', token);
     logChange(actorFrom(req), 'updated', 'household', null, 'Rotated the calendar feed address');
     return { token, path: '/calendar/lar.ics' };
   }),

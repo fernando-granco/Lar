@@ -69,6 +69,64 @@ export function requireUnlock(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ error: 'This person is protected. Enter their password to continue.', code: 'locked', member_id: memberId });
 }
 
+// ---------- agent key ----------
+
+// Optional agent key. When LAR_API_KEY is set, /mcp and any /api request that
+// identifies as an agent (X-Lar-Agent) must send it as a Bearer token or
+// X-Api-Key. Lar otherwise stays an open household app: it does not gate
+// ordinary browser use. A few endpoints that expose more than one person
+// should reasonably see (a full data export, restoring the database, the
+// private calendar feed link) additionally accept this key as a way for
+// scripts and backups to reach them without picking a person.
+const agentKey = process.env.LAR_API_KEY?.trim();
+if (agentKey && agentKey.length < 32) {
+  throw new Error('LAR_API_KEY must be at least 32 characters. Generate a random key instead of using a memorable password.');
+}
+export const agentKeyConfigured = !!agentKey;
+
+export function agentKeyMatches(supplied: string | undefined): boolean {
+  if (!agentKey || !supplied) return false;
+  const expected = crypto.createHash('sha256').update(agentKey).digest();
+  const candidate = crypto.createHash('sha256').update(supplied).digest();
+  return expected.length === candidate.length && crypto.timingSafeEqual(expected, candidate);
+}
+
+export function suppliedAgentKey(req: Request): string | undefined {
+  return req.header('x-api-key') || req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+}
+
+// ---------- sensitive household routes ----------
+
+/**
+ * Guards the handful of routes that hand back more than a normal household
+ * member should stumble into by accident: a full data export (with password
+ * hashes), a database restore, or the private calendar feed link. Anyone who
+ * has picked themselves on this device may use them, same as the rest of
+ * Lar's open design — this only stops a device that has never identified
+ * itself at all, and (when asked) keeps them for adults. A configured
+ * LAR_API_KEY also gets in, so backups can be scripted.
+ */
+export function requireHousehold(opts: { allowKid?: boolean } = {}) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (agentKeyMatches(suppliedAgentKey(req))) return next();
+    const memberId = Number(req.header('x-lar-member'));
+    if (!(memberId > 0)) {
+      res.status(401).json({ error: 'Pick who you are on this device first.', code: 'member_required' });
+      return;
+    }
+    const row = db.prepare('SELECT id, is_kid FROM members WHERE id = ? AND archived = 0').get(memberId) as { id: number; is_kid: number } | undefined;
+    if (!row) {
+      res.status(401).json({ error: 'Pick who you are on this device first.', code: 'member_required' });
+      return;
+    }
+    if (!opts.allowKid && row.is_kid) {
+      res.status(403).json({ error: 'An adult in the household needs to do this.', code: 'adult_required' });
+      return;
+    }
+    next();
+  };
+}
+
 // ---------- Cloudflare Access ----------
 
 const team = process.env.LAR_CF_ACCESS_TEAM; // e.g. "myfamily" for myfamily.cloudflareaccess.com

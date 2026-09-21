@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dataDir, isDist } from './db.js';
 import { errorMiddleware } from './http.js';
@@ -15,11 +14,14 @@ import { calendar, feedHandler } from './routes/calendar.js';
 import { backup } from './routes/backup.js';
 import { auth } from './routes/auth.js';
 import { recipes } from './routes/recipes.js';
-import { requireUnlock } from './auth.js';
+import { requireUnlock, agentKeyConfigured, agentKeyMatches, suppliedAgentKey } from './auth.js';
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+// Only trust X-Forwarded-* headers when Lar actually sits behind a reverse
+// proxy that sets them (Cloudflare Access, nginx, ...). Trusting them by
+// default would let anyone on the network hand the app a fake client IP.
+app.set('trust proxy', process.env.LAR_TRUST_PROXY === '1');
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -27,12 +29,29 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'",
+    "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src 'self'; manifest-src 'self'; worker-src 'self'",
   );
   if (req.secure || req.header('x-forwarded-proto') === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
-app.use(express.json({ limit: '1mb' }));
+
+// Refuse cross-origin browser requests to the API. Every fetch() a web page
+// makes carries an Origin header; a curl request, an MCP agent, or a
+// calendar app never does. This stops a malicious page a household member
+// happens to have open elsewhere — or a DNS-rebinding attack — from using
+// their browser as a stepping stone onto Lar.
+app.use(['/api', '/mcp'], (req, res, next) => {
+  const origin = req.header('origin');
+  if (!origin) return next();
+  try {
+    if (new URL(origin).host === req.header('host')) return next();
+  } catch {
+    /* falls through to refuse */
+  }
+  res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
+});
+
+app.use(express.json({ limit: '2mb' }));
 app.use('/api', (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
@@ -42,27 +61,15 @@ app.use('/api', (_req, res, next) => {
 // /api request that identifies as an agent (X-Lar-Agent) must send the key as
 // a Bearer token or X-Api-Key. It does not protect the browser app: Lar is an
 // open household app, and the key only stops unknown automations on your
-// network from acting as an agent. Keep Lar off the public internet, or put an
-// auth proxy such as Cloudflare Access in front of it.
-const apiKey = process.env.LAR_API_KEY?.trim();
-if (apiKey && apiKey.length < 32) {
-  throw new Error('LAR_API_KEY must be at least 32 characters. Generate a random key instead of using a memorable password.');
-}
-
-function keyMatches(supplied: string | undefined) {
-  if (!apiKey || !supplied) return false;
-  const expected = crypto.createHash('sha256').update(apiKey).digest();
-  const candidate = crypto.createHash('sha256').update(supplied).digest();
-  return crypto.timingSafeEqual(expected, candidate);
-}
-
+// network from acting as an agent (and, on a few sensitive routes, from
+// standing in for a household member — see requireHousehold in auth.ts).
+// Keep Lar off the public internet, or put an auth proxy such as Cloudflare
+// Access in front of it.
 app.use(['/api', '/mcp'], (req, res, next) => {
-  if (!apiKey) return next();
+  if (!agentKeyConfigured) return next();
   const isAgent = req.path.startsWith('/mcp') || req.baseUrl.startsWith('/mcp') || !!req.header('x-lar-agent');
   if (!isAgent) return next();
-  const authorization = req.header('authorization');
-  const supplied = req.header('x-api-key') || authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (keyMatches(supplied)) return next();
+  if (agentKeyMatches(suppliedAgentKey(req))) return next();
   res.status(401).json({ error: 'A valid agent API key is required (LAR_API_KEY).' });
 });
 

@@ -54,6 +54,10 @@ export function errorMiddleware(err: unknown, _req: Request, res: Response, _nex
     res.status(400).json({ error: 'Malformed JSON body' });
     return;
   }
+  if ((err as { type?: string })?.type === 'entity.too.large') {
+    res.status(413).json({ error: 'That picture is too large. Choose a smaller image.' });
+    return;
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong on the server.' });
 }
