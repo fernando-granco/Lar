@@ -13,10 +13,10 @@ import { HttpError } from './http.js';
 import { listMembers, listGroups, todayIso } from './repo.js';
 import { loadHousehold } from './routes/household.js';
 import { queryTasks, createTask, updateTask, setDone, deleteTask } from './routes/tasks.js';
-import { listShoppingLists, queryShoppingItems, createShoppingItem, updateShoppingItem, setChecked, deleteShoppingItem, clearChecked } from './routes/shopping.js';
-import { queryProjects, getProjectDetail, createProject, updateProject, createMilestone, updateMilestone, createExpense } from './routes/projects.js';
+import { listShoppingLists, createShoppingList, renameShoppingList, deleteShoppingList, queryShoppingItems, createShoppingItem, updateShoppingItem, setChecked, deleteShoppingItem, clearChecked } from './routes/shopping.js';
+import { queryProjects, getProjectDetail, createProject, updateProject, deleteProject, createMilestone, updateMilestone, deleteMilestone, createExpense, updateExpense, deleteExpense } from './routes/projects.js';
 import { summary } from './routes/misc.js';
-import { listRecipes, createRecipe, updateRecipe, deleteRecipe, listMenu, upsertMenuEntry, deleteMenuEntry, createMenuRule, listMenuRules } from './routes/recipes.js';
+import { listRecipes, createRecipe, updateRecipe, deleteRecipe, listMenu, upsertMenuEntry, deleteMenuEntry, createMenuRule, listMenuRules, deleteMenuRule } from './routes/recipes.js';
 import { parseShoppingText, parseTaskText } from '../shared/parse.js';
 import type { Assignees, Task, ShoppingItem, Project } from '../shared/types.js';
 
@@ -223,7 +223,7 @@ export function buildMcpServer(actor: Actor) {
     'update_todo',
     {
       title: 'Update a to-do',
-      description: 'Change any field of a to-do by id. Only provided fields change. Use for=[] to make it for everyone.',
+      description: 'Change any field of a to-do by id. Only provided fields change. Use for=[] to make it for everyone, repeat=null to stop it repeating.',
       inputSchema: {
         id: z.number().int(),
         title: z.string().optional(),
@@ -233,13 +233,17 @@ export function buildMcpServer(actor: Actor) {
         for: zNames,
         project: z.string().nullable().optional(),
         notes: z.string().optional(),
+        repeat: z.enum(['daily', 'weekly', 'monthly', 'yearly']).nullable().optional(),
+        repeat_every: z.number().int().min(1).optional().describe('Interval for repeat, default 1.'),
+        repeat_weekdays: z.array(z.number().int().min(0).max(6)).optional().describe('For weekly: 0=Sunday..6=Saturday.'),
       },
     },
-    ({ id, for: names, project, ...rest }) =>
+    ({ id, for: names, project, repeat, repeat_every, repeat_weekdays, ...rest }) =>
       run(() => {
         const patch: Record<string, unknown> = { ...rest };
         if (names !== undefined) patch.assignees = resolveAssignees(names);
         if (project !== undefined) patch.project_id = project === null ? null : resolveProject(project)?.id ?? null;
+        if (repeat !== undefined) patch.recurrence = repeat === null ? null : { freq: repeat, interval: repeat_every ?? 1, weekdays: repeat_weekdays };
         return compactTask(updateTask(id, patch, actor), projectNames());
       }),
   );
@@ -256,6 +260,21 @@ export function buildMcpServer(actor: Actor) {
   );
 
   // ----- shopping -----
+  server.registerTool(
+    'create_shopping_list',
+    { title: 'Create a shopping list', description: 'Start a new shopping list separate from the Household list, e.g. for a trip or a store run.', inputSchema: { name: z.string().min(1) } },
+    ({ name }) => run(() => createShoppingList({ name }, actor)),
+  );
+  server.registerTool(
+    'rename_shopping_list',
+    { title: 'Rename a shopping list', description: 'Rename a shopping list by name or id. The Household list and project lists can be renamed too.', inputSchema: { list: z.string(), name: z.string().min(1) } },
+    ({ list, name }) => run(() => renameShoppingList(resolveList(list), { name }, actor)),
+  );
+  server.registerTool(
+    'delete_shopping_list',
+    { title: 'Delete a shopping list', description: 'Permanently delete a shopping list and its items. The Household list and project lists cannot be deleted this way.', inputSchema: { list: z.string() }, annotations: { destructiveHint: true } },
+    ({ list }) => run(() => { const id = resolveList(list); deleteShoppingList(id, actor); return { deleted: id }; }),
+  );
   server.registerTool(
     'list_shopping',
     {
@@ -456,10 +475,34 @@ export function buildMcpServer(actor: Actor) {
   server.registerTool('complete_milestone', { title: 'Complete a milestone', description: 'Mark a milestone reached (or reopen with done=false).', inputSchema: { id: z.number().int(), done: z.boolean().default(true) } }, ({ id, done }) =>
     run(() => updateMilestone(id, { done }, actor)),
   );
+  server.registerTool('update_milestone', { title: 'Update a milestone', description: 'Change the title, due date, or description of a milestone by id.', inputSchema: { id: z.number().int(), title: z.string().min(1).optional(), due_date: zDate.nullable().optional(), description: z.string().optional() } }, ({ id, ...patch }) =>
+    run(() => updateMilestone(id, patch, actor)),
+  );
+  server.registerTool('delete_milestone', { title: 'Delete a milestone', description: 'Permanently delete a milestone by id.', inputSchema: { id: z.number().int() }, annotations: { destructiveHint: true } }, ({ id }) =>
+    run(() => { deleteMilestone(id, actor); return { deleted: id }; }),
+  );
   server.registerTool(
     'add_expense',
     { title: 'Log an expense', description: 'Record money spent on a project.', inputSchema: { project: z.string(), title: z.string().min(1), amount: z.number().min(0), date: zDate.optional(), category: z.string().optional(), notes: z.string().optional() } },
     ({ project, ...e }) => run(() => createExpense(resolveProject(/^\d+$/.test(project) ? Number(project) : project)!.id, { title: e.title, amount: e.amount, date: e.date, category: e.category ?? '', notes: e.notes ?? '' }, actor)),
+  );
+  server.registerTool(
+    'update_expense',
+    { title: 'Update an expense', description: 'Correct the title, amount, date, category, or notes of a logged expense by id.', inputSchema: { id: z.number().int(), title: z.string().min(1).optional(), amount: z.number().min(0).optional(), date: zDate.optional(), category: z.string().optional(), notes: z.string().optional() } },
+    ({ id, ...patch }) => run(() => updateExpense(id, patch, actor)),
+  );
+  server.registerTool('delete_expense', { title: 'Delete an expense', description: 'Permanently delete a logged expense by id.', inputSchema: { id: z.number().int() }, annotations: { destructiveHint: true } }, ({ id }) =>
+    run(() => { deleteExpense(id, actor); return { deleted: id }; }),
+  );
+  server.registerTool(
+    'delete_project',
+    { title: 'Delete a project', description: 'Permanently delete a project, and with it its milestones, expenses, links, shopping list, and to-dos.', inputSchema: { project: z.string() }, annotations: { destructiveHint: true } },
+    ({ project }) =>
+      run(() => {
+        const p = resolveProject(/^\d+$/.test(project) ? Number(project) : project)!;
+        deleteProject(p.id, actor);
+        return { deleted: p.id, name: p.name };
+      }),
   );
 
   server.registerTool(
@@ -506,6 +549,11 @@ export function buildMcpServer(actor: Actor) {
     'list_recipe_schedules',
     { title: 'List recurring recipe schedules', description: 'Show all recurring meal rules, optionally for one recipe.', inputSchema: { recipe_id: z.number().int().positive().optional() }, annotations: { readOnlyHint: true } },
     ({ recipe_id }) => run(() => listMenuRules(recipe_id)),
+  );
+  server.registerTool(
+    'cancel_recipe_schedule',
+    { title: 'Cancel a recurring recipe schedule', description: 'Stop a recurring meal rule by id. Meals already planned from it are kept; use clear_planned_meal to remove those.', inputSchema: { id: z.number().int() }, annotations: { destructiveHint: true } },
+    ({ id }) => run(() => { deleteMenuRule(id, actor); return { deleted: id }; }),
   );
   server.registerTool(
     'get_weekly_menu',

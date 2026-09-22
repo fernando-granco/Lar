@@ -25,42 +25,49 @@ export function getShoppingList(id: number): ShoppingList | undefined {
 
 shopping.get('/shopping/lists', handler(() => listShoppingLists()));
 
+const listNameBody = z.object({ name: z.string().trim().min(1).max(60) });
+
+export function createShoppingList(input: unknown, actor: Actor): ShoppingList {
+  const body = parse(listNameBody, input);
+  const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM shopping_lists WHERE project_id IS NULL').get() as any).n;
+  const id = Number(db.prepare('INSERT INTO shopping_lists (name, sort_order) VALUES (?, ?)').run(body.name, order).lastInsertRowid);
+  logChange(actor, 'created', 'shopping', id, `Created shopping list "${body.name}"`);
+  return getShoppingList(id)!;
+}
+
 shopping.post(
   '/shopping/lists',
   handler((req, res) => {
-    const body = parse(z.object({ name: z.string().trim().min(1).max(60) }), req.body);
-    const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM shopping_lists WHERE project_id IS NULL').get() as any).n;
-    const id = Number(db.prepare('INSERT INTO shopping_lists (name, sort_order) VALUES (?, ?)').run(body.name, order).lastInsertRowid);
-    logChange(actorFrom(req), 'created', 'shopping', id, `Created shopping list "${body.name}"`);
     res.status(201);
-    return getShoppingList(id);
+    return createShoppingList(req.body, actorFrom(req));
   }),
 );
 
-shopping.patch(
-  '/shopping/lists/:id',
-  handler((req) => {
-    const id = idParam(req);
-    const current = getShoppingList(id);
-    if (!current) throw notFound('List not found');
-    const body = parse(z.object({ name: z.string().trim().min(1).max(60) }), req.body);
-    db.prepare('UPDATE shopping_lists SET name = ? WHERE id = ?').run(body.name, id);
-    logChange(actorFrom(req), 'updated', 'shopping', id, `Renamed list to "${body.name}"`);
-    return getShoppingList(id);
-  }),
-);
+export function renameShoppingList(id: number, input: unknown, actor: Actor): ShoppingList {
+  const current = getShoppingList(id);
+  if (!current) throw notFound('List not found');
+  const body = parse(listNameBody, input);
+  db.prepare('UPDATE shopping_lists SET name = ? WHERE id = ?').run(body.name, id);
+  logChange(actor, 'updated', 'shopping', id, `Renamed list to "${body.name}"`);
+  return getShoppingList(id)!;
+}
+
+shopping.patch('/shopping/lists/:id', handler((req) => renameShoppingList(idParam(req), req.body, actorFrom(req))));
+
+export function deleteShoppingList(id: number, actor: Actor) {
+  const current = getShoppingList(id);
+  if (!current) throw notFound('List not found');
+  if (id === 1) throw badRequest('The Household list cannot be deleted');
+  if (current.project_id) throw badRequest('Project lists are removed with their project');
+  db.prepare('DELETE FROM shopping_lists WHERE id = ?').run(id);
+  cleanAssignments();
+  logChange(actor, 'deleted', 'shopping', id, `Deleted list "${current.name}"`);
+}
 
 shopping.delete(
   '/shopping/lists/:id',
   handler((req, res) => {
-    const id = idParam(req);
-    const current = getShoppingList(id);
-    if (!current) throw notFound('List not found');
-    if (id === 1) throw badRequest('The Household list cannot be deleted');
-    if (current.project_id) throw badRequest('Project lists are removed with their project');
-    db.prepare('DELETE FROM shopping_lists WHERE id = ?').run(id);
-    cleanAssignments();
-    logChange(actorFrom(req), 'deleted', 'shopping', id, `Deleted list "${current.name}"`);
+    deleteShoppingList(idParam(req), actorFrom(req));
     res.status(204);
   }),
 );
