@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { handler, parse } from '../http.js';
 import { subscribe, clientCount } from '../events.js';
-import { todayIso } from '../repo.js';
+import { todayIso, taskDueBySql } from '../repo.js';
 import type { Activity, Summary } from '../../shared/types.js';
 
 export const misc = Router();
@@ -14,7 +14,7 @@ export function summary(): Summary {
   return {
     tasks_open: one("SELECT COUNT(*) AS n FROM tasks WHERE status = 'open' AND project_id IS NULL"),
     tasks_due_today: one("SELECT COUNT(*) AS n FROM tasks WHERE status = 'open' AND due_date = ?", today),
-    tasks_overdue: one("SELECT COUNT(*) AS n FROM tasks WHERE status = 'open' AND due_date < ?", today),
+    tasks_overdue: one(`SELECT COUNT(*) AS n FROM tasks t WHERE t.status = 'open' AND ${taskDueBySql('t')} < ?`, today),
     shopping_open: one('SELECT COUNT(*) AS n FROM shopping_items WHERE checked_at IS NULL AND list_id = 1'),
     projects_active: one("SELECT COUNT(*) AS n FROM projects WHERE status = 'active' AND archived = 0"),
   };
@@ -35,7 +35,7 @@ misc.get(
       household: ['GET /household', 'PATCH /household/settings', 'POST /members', 'PATCH /members/:id', 'DELETE /members/:id', 'POST /groups', 'PATCH /groups/:id', 'DELETE /groups/:id'],
       tasks: ['GET /tasks?status=open|done|all&member=<id>&project=<id>|none&due=today|overdue|week|none|scheduled&q=', 'GET /tasks/:id', 'POST /tasks', 'PATCH /tasks/:id', 'POST /tasks/:id/complete', 'POST /tasks/:id/reopen', 'DELETE /tasks/:id', 'POST /tasks/reorder', 'POST /tasks/clear-completed'],
       shopping: ['GET /shopping/lists', 'POST /shopping/lists', 'PATCH /shopping/lists/:id', 'DELETE /shopping/lists/:id', 'POST /shopping/lists/:id/clear-checked', 'GET /shopping/items?list=<id>&status=open|checked|all&member=<id>', 'POST /shopping/items', 'PATCH /shopping/items/:id', 'POST /shopping/items/:id/check', 'POST /shopping/items/:id/uncheck', 'DELETE /shopping/items/:id', 'GET /shopping/suggestions?q='],
-      projects: ['GET /projects?status=open|active|planned|idea|on_hold|done|all&member=<id>', 'GET /projects/:id', 'POST /projects', 'PATCH /projects/:id', 'DELETE /projects/:id', 'POST /projects/:id/milestones', 'PATCH /milestones/:id', 'DELETE /milestones/:id', 'POST /projects/:id/expenses', 'PATCH /expenses/:id', 'DELETE /expenses/:id', 'POST /projects/:id/links', 'PATCH /links/:id', 'DELETE /links/:id'],
+      projects: ['GET /projects?status=open|active|planned|idea|on_hold|done|all&member=<id>', 'GET /projects/:id', 'POST /projects', 'PATCH /projects/:id', 'DELETE /projects/:id', 'POST /projects/:id/milestones', 'PATCH /milestones/:id', 'DELETE /milestones/:id', 'POST /projects/:id/expenses', 'PATCH /expenses/:id', 'DELETE /expenses/:id', 'POST /projects/:id/links', 'PATCH /links/:id', 'DELETE /links/:id', 'POST /projects/:id/notes', 'PATCH /notes/:id', 'DELETE /notes/:id', 'GET /notes/today'],
       recipes: ['GET /recipes?q=', 'GET /recipes/:id', 'POST /recipes', 'PATCH /recipes/:id', 'DELETE /recipes/:id', 'GET /recipes/:id/rules', 'POST /menu/rules', 'DELETE /menu/rules/:id', 'GET /menu?from=&to=', 'POST /menu', 'DELETE /menu/:id'],
       other: ['GET /summary', 'GET /activity?limit=&entity=&entity_id=', 'GET /events (server-sent events)', 'GET /health'],
     },

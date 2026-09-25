@@ -32,7 +32,7 @@ switch (cmd) {
     const m = findMember(args[0]);
     db.prepare('UPDATE members SET password_hash = NULL WHERE id = ?').run(m.id);
     revokeUnlocks(m.id);
-    console.log(`Password removed for ${m.name}. They can set a new one from the Household page.`);
+    console.log(`Password removed for ${m.name}. They can set a new one in Settings → People.`);
     break;
   }
   default:

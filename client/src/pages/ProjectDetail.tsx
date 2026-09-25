@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Pencil, Trash2, Flag, CheckSquare, ShoppingBasket, Wallet, StickyNote, Link2, CalendarDays, Sparkles, Archive, ExternalLink, Milestone as MilestoneIcon, Receipt, MoreHorizontal, SlidersHorizontal, Eye, EyeOff, ChevronUp, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
-import { keys, useHousehold, useInvalidatingMutation } from '@/lib/hooks';
-import { friendlyDate, money, PROJECT_STATUS, daysUntil, dueTone, today } from '@/lib/format';
+import { keys, useHousehold, useInvalidatingMutation, usePermissions, useCurrentMember } from '@/lib/hooks';
+import { friendlyDate, money, PROJECT_STATUS, daysUntil, dueTone, today, getWeekStart } from '@/lib/format';
 import { parseShoppingText, parseTaskText } from '@shared/parse';
 import { Card, Button, Empty, Progress, Badge, CheckBox, Field, Input, TextArea, Avatar, IconButton, Select, Segmented, cx } from '@/components/ui';
 import { Sheet, Confirm } from '@/components/Sheet';
@@ -15,7 +15,8 @@ import { TaskSheet } from '@/components/TaskSheet';
 import { ShoppingRow } from '@/components/ShoppingRow';
 import { ShoppingItemSheet } from '@/components/ShoppingItemSheet';
 import { useToast } from '@/components/Toast';
-import type { ProjectDetail as PD, Milestone, Expense, Task, ShoppingItem } from '@shared/types';
+import { NoteCard, NoteEditor, NotesBoard } from '@/components/ProjectNotes';
+import type { ProjectDetail as PD, Milestone, Expense, Task, ShoppingItem, ProjectNote } from '@shared/types';
 import { setPrefs, usePrefs, type ProjectOverviewDensity, type ProjectOverviewSection, type ProjectOverviewWidth } from '@/lib/store';
 
 type Tab = 'overview' | 'milestones' | 'todos' | 'shopping' | 'budget' | 'notes';
@@ -26,7 +27,10 @@ export function ProjectDetail() {
   const toast = useToast();
   const { data: household } = useHousehold();
   const projQ = useQuery({ queryKey: keys.project(id), queryFn: () => api.project(id), enabled: Number.isFinite(id) });
-  const [tab, setTab] = useState<Tab>('overview');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => (['overview', 'milestones', 'todos', 'shopping', 'budget', 'notes'].includes(params.get('tab') ?? '') ? (params.get('tab') as Tab) : 'overview'));
+  const me = useCurrentMember();
+  const { can } = usePermissions();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -52,6 +56,8 @@ export function ProjectDetail() {
   const participantIds = [...new Set([...(p.owner_id ? [p.owner_id] : []), ...p.member_ids])];
   const openTasks = p.tasks.filter((t) => t.status === 'open');
   const openItems = p.shopping_items.filter((i) => !i.checked_at);
+  // Kids change projects they started or own; the rest follows what adults allowed.
+  const mayEdit = can('projects', me && (p.created_by === me.id || p.owner_id === me.id) ? me.id : p.created_by);
 
   const tabs: { key: Tab; label: string; icon: typeof Flag; n?: number }[] = [
     { key: 'overview', label: 'Overview', icon: Flag },
@@ -59,7 +65,7 @@ export function ProjectDetail() {
     { key: 'todos', label: 'To-dos', icon: CheckSquare, n: openTasks.length },
     { key: 'shopping', label: 'Shopping', icon: ShoppingBasket, n: openItems.length },
     { key: 'budget', label: 'Budget', icon: Wallet, n: p.expenses.length },
-    { key: 'notes', label: 'Notes', icon: StickyNote, n: p.links.length },
+    { key: 'notes', label: 'Notes', icon: StickyNote, n: p.project_notes.length + p.links.length },
   ];
 
   return (
@@ -67,8 +73,8 @@ export function ProjectDetail() {
       <div className="row between">
         <Link to="/projects" className="btn btn-ghost btn-sm" style={{ marginLeft: -8 }}><ArrowLeft /> Projects</Link>
         <div className="row" style={{ gap: 4, position: 'relative' }}>
-          <Button size="sm" icon={Pencil} onClick={() => setEditing(true)}>Edit</Button>
-          <IconButton icon={MoreHorizontal} label="More" onClick={() => setMenu((v) => !v)} />
+          {mayEdit && <Button size="sm" icon={Pencil} onClick={() => setEditing(true)}>Edit</Button>}
+          {mayEdit && <IconButton icon={MoreHorizontal} label="More" onClick={() => setMenu((v) => !v)} />}
           {menu && (
             <div className="card" style={{ position: 'absolute', right: 0, top: 40, zIndex: 5, minWidth: 200, padding: 6, boxShadow: 'var(--shadow)' }} onMouseLeave={() => setMenu(false)}>
               {p.status !== 'done' && <button type="button" className="nav-item" style={{ width: '100%' }} onClick={() => { setStatus.mutate('done'); setMenu(false); toast('Marked as done'); }}><CheckSquare /> Mark as done</button>}
@@ -172,34 +178,12 @@ function Overview({ p, owner, currency, participantIds, goTo, onEditProject }: {
   const [milestoneDue, setMilestoneDue] = useState('');
   const [milestoneDescription, setMilestoneDescription] = useState('');
   const addMilestone = useInvalidatingMutation(() => api.createMilestone(p.id, { title: milestoneTitle.trim(), due_date: milestoneDue || null, description: milestoneDescription }), ['project', 'projects']);
-  const [notes, setNotes] = useState(p.notes);
-  const [notesSaved, setNotesSaved] = useState(true);
-  const notesTimer = useRef<number>(undefined);
-  const saveNotes = useInvalidatingMutation((value: string) => api.updateProject(p.id, { notes: value }), ['project']);
+  const [note, setNote] = useState<ProjectNote | 'new' | null>(null);
+  const overviewNotes = p.project_notes.filter((n) => n.show_on_overview).slice(0, limit);
   const [linkLabel, setLinkLabel] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const addLink = useInvalidatingMutation(() => api.createLink(p.id, { label: linkLabel.trim() || hostOf(linkUrl), url: linkUrl.trim() }), ['project']);
 
-  useEffect(() => {
-    setNotes(p.notes);
-    setNotesSaved(true);
-  }, [p.id, p.notes]);
-
-  const updateNotes = (value: string) => {
-    setNotes(value);
-    setNotesSaved(false);
-    window.clearTimeout(notesTimer.current);
-    notesTimer.current = window.setTimeout(async () => {
-      await saveNotes.mutateAsync(value);
-      setNotesSaved(true);
-    }, 800);
-  };
-  const flushNotes = async () => {
-    if (notesSaved) return;
-    window.clearTimeout(notesTimer.current);
-    await saveNotes.mutateAsync(notes);
-    setNotesSaved(true);
-  };
   const moveOverview = (key: ProjectOverviewSection, direction: -1 | 1) => {
     const next = [...prefs.projectOverviewOrder];
     const from = next.indexOf(key);
@@ -255,8 +239,12 @@ function Overview({ p, owner, currency, participantIds, goTo, onEditProject }: {
       </Card>
     );
     return (
-      <Card title="Notes & links" icon={StickyNote} action={<span className="faint" style={{ fontSize: 12 }}>{notesSaved ? 'Saved' : 'Saving…'}</span>}>
-        <TextArea value={notes} onChange={(event) => updateNotes(event.target.value)} onBlur={() => void flushNotes()} placeholder="Add project notes…" style={{ minHeight: prefs.projectOverviewDensity === 'compact' ? 80 : 130 }} />
+      <Card title="Notes & links" icon={StickyNote} action={actionPair(() => setNote('new'), () => goTo('notes'), 'Note')}>
+        {overviewNotes.length ? (
+          <div className="notes-board compact">{overviewNotes.map((n) => <NoteCard key={n.id} note={n} onOpen={setNote} compact />)}</div>
+        ) : (
+          <p className="faint" style={{ fontSize: 13 }}>{p.project_notes.length ? 'No notes chosen for the overview. Open a note to show it here.' : 'No notes yet. Add one for measurements, ideas, or phone numbers.'}</p>
+        )}
         {!!p.links.length && <div className="overview-links">{p.links.slice(0, limit).map((link) => <a key={link.id} href={link.url} target="_blank" rel="noreferrer"><ExternalLink /> <span className="truncate">{link.label}</span></a>)}</div>}
         <form className="overview-link-form" onSubmit={async (event) => { event.preventDefault(); if (!/^https?:\/\//i.test(linkUrl.trim())) return toast('Links need to start with http:// or https://'); await addLink.mutateAsync(undefined as never); setLinkLabel(''); setLinkUrl(''); toast('Link added'); }}>
           <Input value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://…" inputMode="url" />
@@ -286,6 +274,7 @@ function Overview({ p, owner, currency, participantIds, goTo, onEditProject }: {
       <TaskSheet open={editTask !== null} onClose={() => setEditTask(null)} task={editTask === 'new' ? null : editTask} fixedProject={{ id: p.id, milestones: p.milestones, memberIds: participantIds }} />
       <ShoppingItemSheet open={editItem !== null} onClose={() => setEditItem(null)} item={editItem === 'new' ? null : editItem} listId={p.shopping_list.id} defaultMemberIds={participantIds} />
       <ExpenseSheet open={expenseOpen} onClose={() => setExpenseOpen(false)} projectId={p.id} currency={currency} />
+      <NoteEditor project={p} note={note === 'new' ? null : note} open={note !== null} onClose={() => setNote(null)} />
     </>
   );
 }
@@ -358,8 +347,8 @@ function ProjectTodos({ p, participantIds }: { p: PD; participantIds: number[] }
   const [edit, setEdit] = useState<Task | null | 'new'>(null);
   const [quick, setQuick] = useState('');
   const create = useInvalidatingMutation((text: string) => {
-    const parsed = parseTaskText(text);
-    return api.createTask({ title: parsed.title, due_date: parsed.due_date, priority: parsed.priority ?? 'normal', project_id: p.id, assignees: participantIds.length ? { member_ids: participantIds, group_ids: [] } : undefined });
+    const parsed = parseTaskText(text, new Date(), getWeekStart());
+    return api.createTask({ title: parsed.title, due_date: parsed.due_date, due_window: parsed.due_window, due_window_start: parsed.due_window_start, priority: parsed.priority ?? 'normal', project_id: p.id, assignees: participantIds.length ? { member_ids: participantIds, group_ids: [] } : undefined });
   }, ['project', 'projects', 'tasks', 'summary']);
   const clearDone = useInvalidatingMutation(() => api.clearCompletedTasks(p.id), ['project', 'projects', 'tasks']);
   const open = p.tasks.filter((t) => t.status === 'open');
@@ -563,29 +552,13 @@ function ExpenseSheet({ open, onClose, projectId, currency, expense, initial, on
 
 function Notes({ p }: { p: PD }) {
   const toast = useToast();
-  const [notes, setNotes] = useState(p.notes);
-  const [saved, setSaved] = useState(true);
-  const timer = useRef<number>(undefined);
-  const save = useInvalidatingMutation((n: string) => api.updateProject(p.id, { notes: n }), ['project']);
-  useEffect(() => setNotes(p.notes), [p.id, p.notes]);
-  const onChange = (v: string) => {
-    setNotes(v);
-    setSaved(false);
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(async () => {
-      await save.mutateAsync(v);
-      setSaved(true);
-    }, 800);
-  };
   const [label, setLabel] = useState('');
   const [url, setUrl] = useState('');
   const addLink = useInvalidatingMutation(() => api.createLink(p.id, { label: label.trim() || hostOf(url), url: url.trim() }), ['project']);
   const removeLink = useInvalidatingMutation((id: number) => api.deleteLink(id), ['project']);
   return (
-    <div className="grid-2">
-      <Card title="Notes" icon={StickyNote} action={<span className="faint" style={{ fontSize: 12 }}>{saved ? 'Saved' : 'Saving…'}</span>}>
-        <TextArea value={notes} onChange={(e) => onChange(e.target.value)} placeholder="Measurements, ideas, supplier phone numbers, paint codes…" style={{ minHeight: 260, fontFamily: 'var(--font)', lineHeight: 1.55 }} />
-      </Card>
+    <>
+      <NotesBoard project={p} />
       <Card title="Links" icon={Link2} flush>
         <div className="list">
           {p.links.map((l) => (
@@ -615,7 +588,7 @@ function Notes({ p }: { p: PD }) {
           </div>
         </form>
       </Card>
-    </div>
+    </>
   );
 }
 

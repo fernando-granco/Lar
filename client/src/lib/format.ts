@@ -1,6 +1,14 @@
-import { isoDate } from '@shared/parse';
+import { isoDate, windowStart, windowEnd, type WeekStart } from '@shared/parse';
+import type { Task, DueWindow } from '@shared/types';
 
 export const today = () => isoDate(new Date());
+
+// The household's first day of the week, kept here so every date helper agrees. App sets it from settings.
+let weekStartsOn: WeekStart = 'monday';
+export const setWeekStart = (value: WeekStart) => {
+  weekStartsOn = value;
+};
+export const getWeekStart = () => weekStartsOn;
 
 export function addDays(iso: string, n: number) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -28,6 +36,81 @@ export function friendlyDate(iso: string | null | undefined, opts: { relative?: 
   const within6 = Math.abs(d.getTime() - parseIso(t).getTime()) < 6 * 86400000;
   if (within6 && opts.relative) return d.toLocaleDateString(undefined, { weekday: 'long' });
   return d.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** A day heading that always carries the date: "Today · Thu, Sep 25", "Tomorrow · Fri, Sep 26", "Monday, Sep 28". */
+export function dayHeading(iso: string) {
+  const t = today();
+  const d = parseIso(iso);
+  const year = d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' as const };
+  const short = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...year });
+  if (iso === t) return `Today · ${short}`;
+  if (iso === addDays(t, 1)) return `Tomorrow · ${short}`;
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', ...year });
+}
+
+/** "This week", "Next week", "Week of Oct 5", "This month", "Next month", "November". */
+export function windowLabel(kind: DueWindow, start: string) {
+  const t = today();
+  if (kind === 'week') {
+    const current = windowStart('week', t, weekStartsOn);
+    if (start === current) return 'This week';
+    if (start === addDays(current, 7)) return 'Next week';
+    if (start === addDays(current, -7)) return 'Last week';
+    return `Week of ${friendlyDate(start, { relative: false })}`;
+  }
+  const current = windowStart('month', t);
+  if (start === current) return 'This month';
+  if (start === addDays(windowEnd('month', current), 1)) return 'Next month';
+  const d = parseIso(start);
+  return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { month: 'long' } : { month: 'long', year: 'numeric' });
+}
+
+type DueParts = Pick<Task, 'due_date' | 'due_window' | 'due_window_start'>;
+
+/** The day a to-do is due by: its date, or the last day of its week or month. */
+export function taskDueBy(task: DueParts): string | null {
+  if (task.due_date) return task.due_date;
+  if (task.due_window && task.due_window_start) return windowEnd(task.due_window, task.due_window_start);
+  return null;
+}
+
+export function dueLabel(task: DueParts) {
+  if (task.due_date) return friendlyDate(task.due_date);
+  if (task.due_window && task.due_window_start) return windowLabel(task.due_window, task.due_window_start);
+  return '';
+}
+
+/** Like dueTone, but a soft window counts as overdue only once it has fully passed. */
+export function taskTone(task: DueParts, done = false): ReturnType<typeof dueTone> {
+  if (task.due_date || done) return dueTone(task.due_date, done);
+  const by = taskDueBy(task);
+  if (!by) return 'none';
+  if (by < today()) return 'overdue';
+  return task.due_window_start! <= today() ? 'soon' : 'later';
+}
+
+export type TaskBucket = 'overdue' | 'today' | 'tomorrow' | 'week' | 'later' | 'someday';
+
+/** Buckets in the order people care about them. */
+export const TASK_BUCKETS: { key: TaskBucket; label: string; tone?: string }[] = [
+  { key: 'overdue', label: 'Overdue', tone: 'overdue' },
+  { key: 'today', label: 'Today', tone: 'today' },
+  { key: 'tomorrow', label: 'Tomorrow' },
+  { key: 'week', label: 'Next 7 days' },
+  { key: 'later', label: 'Later' },
+  { key: 'someday', label: 'No date' },
+];
+
+export function taskBucket(task: DueParts): TaskBucket {
+  const t = today();
+  const by = taskDueBy(task);
+  if (!by) return 'someday';
+  if (by < t) return 'overdue';
+  if (task.due_date === t) return 'today';
+  if (task.due_date === addDays(t, 1)) return 'tomorrow';
+  if (by <= addDays(t, 7) || (task.due_window && task.due_window_start! <= t && task.due_window === 'week')) return 'week';
+  return 'later';
 }
 
 export function daysUntil(iso: string) {

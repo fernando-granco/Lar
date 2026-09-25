@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db, nowIso } from '../db.js';
 import { actorFrom, logChange, type Actor } from '../context.js';
 import { badRequest, handler, idParam, notFound, parse, onlySupplied, zDate } from '../http.js';
+import { assertKidMay } from '../permissions.js';
 import type { MenuEntry, MenuRule, Recipe, RecipeIngredient } from '../../shared/types.js';
 
 export const recipes = Router();
@@ -80,6 +81,7 @@ export function createRecipe(input: unknown, actor: Actor): Recipe {
 export function updateRecipe(id: number, input: unknown, actor: Actor): Recipe {
   const current = getRecipe(id);
   if (!current) throw notFound('Recipe not found');
+  assertKidMay(actor, 'recipes', current.created_by);
   const body = onlySupplied(input, parse(recipeBody.partial(), input));
   const next = { ...current, ...body };
   db.prepare(`UPDATE recipes SET name=@name, description=@description, ingredients=@ingredients, instructions=@instructions,
@@ -93,6 +95,7 @@ export function updateRecipe(id: number, input: unknown, actor: Actor): Recipe {
 export function deleteRecipe(id: number, actor: Actor) {
   const current = getRecipe(id);
   if (!current) throw notFound('Recipe not found');
+  assertKidMay(actor, 'recipes', current.created_by);
   // Menu rows require either a recipe or a custom title, so remove the slots
   // explicitly instead of letting ON DELETE SET NULL violate that invariant.
   db.transaction(() => {
@@ -142,16 +145,17 @@ export function listMenuRules(recipeId?: number): MenuRule[] {
   return (db.prepare(`SELECT * FROM menu_rules ${recipeId ? 'WHERE recipe_id = ?' : ''} ORDER BY id DESC`).all(...(recipeId ? [recipeId] : [])) as Array<Omit<MenuRule, 'recurrence'> & { recurrence: string }>).map((rule) => ({ ...rule, recurrence: JSON.parse(rule.recurrence) }));
 }
 export function createMenuRule(input: unknown, actor: Actor): MenuRule {
-  ensureRecipesEnabled(); const body = parse(ruleBody, input);
+  ensureRecipesEnabled(); assertKidMay(actor, 'recipes'); const body = parse(ruleBody, input);
   if (!getRecipe(body.recipe_id)) throw badRequest('Recipe does not exist');
   const id = Number(db.prepare('INSERT INTO menu_rules (recipe_id, meal_type, start_date, recurrence, created_by) VALUES (?, ?, ?, ?, ?)').run(body.recipe_id, body.meal_type, body.start_date, JSON.stringify(body.recurrence), actor.type === 'member' ? actor.id : null).lastInsertRowid);
   const rule = listMenuRules().find((item) => item.id === id)!;
   logChange(actor, 'created', 'menu', id, `Scheduled ${getRecipe(body.recipe_id)!.name}`); return rule;
 }
-export function deleteMenuRule(id: number, actor: Actor) { ensureRecipesEnabled(); const rule = db.prepare('SELECT recipe_id FROM menu_rules WHERE id = ?').get(id) as { recipe_id: number } | undefined; if (!rule) throw notFound('Menu rule not found'); db.prepare('DELETE FROM menu_rules WHERE id = ?').run(id); logChange(actor, 'deleted', 'menu', id, 'Removed recurring meal'); }
+export function deleteMenuRule(id: number, actor: Actor) { ensureRecipesEnabled(); assertKidMay(actor, 'recipes'); const rule = db.prepare('SELECT recipe_id FROM menu_rules WHERE id = ?').get(id) as { recipe_id: number } | undefined; if (!rule) throw notFound('Menu rule not found'); db.prepare('DELETE FROM menu_rules WHERE id = ?').run(id); logChange(actor, 'deleted', 'menu', id, 'Removed recurring meal'); }
 
 export function upsertMenuEntry(input: unknown, actor: Actor): MenuEntry {
   ensureRecipesEnabled();
+  assertKidMay(actor, 'recipes');
   const body = parse(menuBody, input);
   if (body.recipe_id && !db.prepare('SELECT 1 FROM recipes WHERE id = ?').get(body.recipe_id)) throw badRequest('Recipe does not exist');
   const now = nowIso();
@@ -172,6 +176,7 @@ export function deleteMenuEntry(id: number, actor: Actor) {
   ensureRecipesEnabled();
   const current = db.prepare('SELECT * FROM weekly_menu WHERE id = ?').get(id) as { id: number; meal_date: string; meal_type: string } | undefined;
   if (!current) throw notFound('Menu entry not found');
+  assertKidMay(actor, 'recipes');
   db.prepare('DELETE FROM weekly_menu WHERE id = ?').run(id);
   logChange(actor, 'deleted', 'menu', id, `Cleared ${current.meal_type} on ${current.meal_date}`);
 }

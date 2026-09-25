@@ -43,9 +43,9 @@ export function Layout({ children }: { children: ReactNode }) {
           </NavLink>
         ))}
         <div className="sidebar-foot">
-          <NavLink to="/household" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+          <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <Settings />
-            Household
+            Settings
           </NavLink>
           <button type="button" className="member-switch" onClick={() => setPickerOpen(true)}>
             {me ? (
@@ -69,7 +69,10 @@ export function Layout({ children }: { children: ReactNode }) {
           <BrandMark />
           {name}
         </Link>
-        <button type="button" style={{ display: 'flex', marginLeft: 'auto' }} onClick={() => setPickerOpen(true)} aria-label="Choose who you are">
+        <NavLink to="/settings" className={({ isActive }) => `topbar-settings${isActive ? ' active' : ''}`} aria-label="Settings" title="Settings">
+          <Settings />
+        </NavLink>
+        <button type="button" style={{ display: 'flex' }} onClick={() => setPickerOpen(true)} aria-label="Choose who you are">
           {me ? (
             <Avatar member={me} />
           ) : (

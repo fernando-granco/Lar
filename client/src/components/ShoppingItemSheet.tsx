@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { api, type ShoppingItemInput } from '@/lib/api';
-import { useHousehold, useInvalidatingMutation } from '@/lib/hooks';
+import { useHousehold, useInvalidatingMutation, usePermissions } from '@/lib/hooks';
 import { useToast } from './Toast';
 import { Sheet, Confirm } from './Sheet';
 import { Button, Field, Input, Select, TextArea } from './ui';
@@ -43,6 +43,7 @@ export function ShoppingItemSheet({ open, onClose, item, listId, lists, defaultM
     const body: ShoppingItemInput = { ...d };
     return item ? api.updateShoppingItem(item.id, body) : api.createShoppingItem({ ...body, name: d.name });
   }, ['shopping', 'project', 'projects', 'summary']);
+  const { can } = usePermissions();
   const remove = useInvalidatingMutation(() => api.deleteShoppingItem(item!.id), ['shopping', 'project', 'projects', 'summary']);
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -66,7 +67,7 @@ export function ShoppingItemSheet({ open, onClose, item, listId, lists, defaultM
         title={item ? 'Edit item' : 'Add to shopping list'}
         footer={
           <>
-            {item && <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(true)}>Remove</Button>}
+            {item && can('shopping', item.created_by) && <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(true)}>Remove</Button>}
             <Button variant="primary" className="right" type="submit" form="shopping-form" disabled={save.isPending}>
               {item ? 'Save changes' : 'Add item'}
             </Button>

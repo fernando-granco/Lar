@@ -1,5 +1,6 @@
-import { db, nowIso } from './db.js';
-import type { Assignees, Member, Group, Task, ShoppingItem, Recurrence } from '../shared/types.js';
+import { db, nowIso, getSetting } from './db.js';
+import { windowStart, type WeekStart } from '../shared/parse.js';
+import type { Assignees, Member, Group, Task, ShoppingItem, Recurrence, DueWindow } from '../shared/types.js';
 
 type AssignEntity = 'task' | 'shopping_item';
 
@@ -69,9 +70,18 @@ export function mapTask(r: any, assignees?: Assignees): Task {
   };
 }
 
+/**
+ * The day a to-do is due by: its date, or the last day of its soft window
+ * ("this week" is due by the end of the week). NULL when it has neither.
+ */
+export const taskDueBySql = (alias = 't') => `COALESCE(${alias}.due_date, CASE ${alias}.due_window
+  WHEN 'week' THEN date(${alias}.due_window_start, '+6 days')
+  WHEN 'month' THEN date(${alias}.due_window_start, '+1 month', '-1 day') END)`;
+
 export const TASK_ORDER = `ORDER BY
   CASE WHEN t.status = 'done' THEN 1 ELSE 0 END,
-  CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END, t.due_date, t.due_time,
+  CASE WHEN ${taskDueBySql()} IS NULL THEN 1 ELSE 0 END, ${taskDueBySql()},
+  CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END, t.due_time,
   CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
   t.sort_order, t.id`;
 
@@ -83,6 +93,11 @@ export function loadTasks(where: string, params: Record<string, unknown> = {}, o
 
 export function getTask(id: number): Task | undefined {
   return loadTasks('t.id = @id', { id })[0];
+}
+
+/** Move a date to the first day of its week or month (the week start follows the household setting). */
+export function snapToWindow(kind: DueWindow, date: string): string {
+  return windowStart(kind, date, (getSetting('week_starts_on', 'monday') as WeekStart) || 'monday');
 }
 
 /** Compute the next due date for a recurring task. */

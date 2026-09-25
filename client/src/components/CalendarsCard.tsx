@@ -8,7 +8,7 @@ import { Confirm } from './Sheet';
 import { useToast } from './Toast';
 import type { Calendar } from '@shared/types';
 
-/** Household page section: the outgoing feed and the incoming Google / Apple / iCal calendars. */
+/** Settings section: the outgoing feed and the incoming Google / Apple / iCal calendars. */
 export function CalendarsCard() {
   const toast = useToast();
   const { data: household } = useHousehold();

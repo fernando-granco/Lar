@@ -11,7 +11,7 @@ docker compose up -d --build
 
 Open `http://YOUR-SERVER:3001`. The first screen helps you add your household.
 
-The database lives in Lar's Docker volume. Use Household → Data to download a full backup before upgrades, and keep that file somewhere safe.
+The database lives in Lar's Docker volume. Use Settings → Backup & about to download a full backup before upgrades, and keep that file somewhere safe.
 
 For normal maintenance:
 

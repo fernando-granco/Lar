@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { CalendarDays, Clock, MapPin, Settings } from 'lucide-react';
 import { api } from '@/lib/api';
-import { friendlyDate, today, addDays } from '@/lib/format';
+import { dayHeading, today, addDays } from '@/lib/format';
 import { Card, Empty } from './ui';
 import type { CalendarEvent } from '@shared/types';
 
@@ -35,17 +35,17 @@ export function CalendarCard({ days = 7 }: { days?: number }) {
   const failing = calsQ.data.filter((c) => c.enabled && c.last_error);
 
   return (
-    <Card title="Calendar" icon={CalendarDays} flush action={<Link to="/household" className="btn btn-ghost btn-sm" aria-label="Calendar settings"><Settings /></Link>}>
+    <Card title="Calendar" icon={CalendarDays} flush action={<Link to="/settings?section=connections" className="btn btn-ghost btn-sm" aria-label="Calendar settings"><Settings /></Link>}>
       {failing.length > 0 && (
         <p className="error" style={{ padding: '4px 20px 8px', fontSize: 13 }}>
-          Could not read {failing.map((c) => c.name).join(', ')}. Check the link on the Household page.
+          Could not read {failing.map((c) => c.name).join(', ')}. Check the link in Settings → Connections.
         </p>
       )}
       {evQ.isLoading ? null : grouped.length ? (
         <div className="list">
           {grouped.map(([day, events]) => (
             <div key={day} className="list-section">
-              <header className={day === today() ? 'today' : ''}>{friendlyDate(day)}</header>
+              <header className={day === today() ? 'today' : ''}>{dayHeading(day)}</header>
               {events.map((e, i) => (
                 <div key={`${e.calendar_id}-${e.start}-${i}`} className="rowitem" style={{ cursor: 'default' }}>
                   <span className="dot" style={{ background: e.color, marginTop: 7 }} />

@@ -1,6 +1,7 @@
 import type {
   Household, Member, Group, Settings, Task, ShoppingList, ShoppingItem, Project, ProjectDetail,
   Milestone, Expense, ProjectLink, Activity, Summary, Assignees, Recurrence, Calendar, CalendarEvent, Agenda, Recipe, MenuEntry, MealType, MenuRule,
+  DueWindow, KidPermissions, ProjectNote, TodayNote,
 } from '@shared/types';
 import { getCurrentMemberId, getUnlockToken, clearMember } from './store';
 
@@ -45,8 +46,10 @@ const qs = (params: Record<string, string | number | boolean | undefined | null>
 
 export type TaskInput = Partial<{
   title: string; notes: string; priority: Task['priority']; due_date: string | null; due_time: string | null;
+  due_window: DueWindow | null; due_window_start: string | null;
   recurrence: Recurrence | null; project_id: number | null; milestone_id: number | null; assignees: Assignees; status: Task['status'];
 }>;
+export type NoteInput = Partial<Pick<ProjectNote, 'title' | 'body' | 'color' | 'pinned' | 'show_on_overview' | 'show_on_today' | 'member_ids' | 'sort_order'>>;
 export type ShoppingItemInput = Partial<{
   list_id: number; name: string; quantity: number | null; unit: string; category: string; notes: string; price: number | null; priority: ShoppingItem['priority']; assignees: Assignees; checked: boolean;
 }>;
@@ -59,13 +62,13 @@ export type ExpenseInput = Partial<{ title: string; amount: number; date: string
 
 export const api = {
   household: () => get<Household>('/household'),
-  updateSettings: (s: Partial<Settings>) => patch<Settings>('/household/settings', s),
+  updateSettings: (s: Partial<Omit<Settings, 'kid_permissions'>> & { kid_permissions?: Partial<KidPermissions> }) => patch<Settings>('/household/settings', s),
   createMember: (m: { name: string; color?: string; initials?: string; email?: string; is_kid?: boolean; avatar_url?: string }) => post<Member>('/members', m),
   updateMember: (id: number, m: Partial<Pick<Member, 'name' | 'color' | 'initials' | 'email' | 'is_kid' | 'archived' | 'sort_order' | 'avatar_url'>>) => patch<Member>(`/members/${id}`, m),
   unlock: (member_id: number, password: string) => post<{ token: string | null; member: Member }>('/auth/unlock', { member_id, password }),
   accessSignIn: () => post<{ configured: boolean; member: Member | null; token: string | null; email?: string }>('/auth/access'),
-  setPassword: (id: number, password: string, current?: string) => post<{ token: string; member: Member }>(`/members/${id}/password`, { password, current }),
-  removePassword: (id: number, current: string) => request<void>('DELETE', `/members/${id}/password`, { current }),
+  setPassword: (id: number, password: string, current?: string) => post<{ token: string | null; member: Member }>(`/members/${id}/password`, { password, current }),
+  removePassword: (id: number, current?: string) => request<void>('DELETE', `/members/${id}/password`, { current: current ?? '' }),
   deleteMember: (id: number) => del(`/members/${id}`),
   createGroup: (g: { name: string; color?: string; member_ids?: number[] }) => post<Group>('/groups', g),
   updateGroup: (id: number, g: Partial<Pick<Group, 'name' | 'color' | 'member_ids'>>) => patch<Group>(`/groups/${id}`, g),
@@ -73,6 +76,7 @@ export const api = {
 
   tasks: (p: { status?: 'open' | 'done' | 'all'; project?: number | 'none' | 'any'; member?: number; due?: string; from?: string; to?: string; q?: string; limit?: number } = {}) =>
     get<Task[]>(`/tasks${qs(p)}`),
+  task: (id: number) => get<Task>(`/tasks/${id}`),
   createTask: (t: TaskInput & { title: string }) => post<Task>('/tasks', t),
   updateTask: (id: number, t: TaskInput) => patch<Task>(`/tasks/${id}`, t),
   completeTask: (id: number) => post<Task>(`/tasks/${id}/complete`),
@@ -118,6 +122,10 @@ export const api = {
   deleteExpense: (id: number) => del(`/expenses/${id}`),
   createLink: (projectId: number, l: { label: string; url: string }) => post<ProjectLink>(`/projects/${projectId}/links`, l),
   deleteLink: (id: number) => del(`/links/${id}`),
+  createNote: (projectId: number, n: NoteInput) => post<ProjectNote>(`/projects/${projectId}/notes`, n),
+  updateNote: (id: number, n: NoteInput) => patch<ProjectNote>(`/notes/${id}`, n),
+  deleteNote: (id: number) => del(`/notes/${id}`),
+  todayNotes: () => get<TodayNote[]>('/notes/today'),
 
   calendars: () => get<Calendar[]>('/calendars'),
   createCalendar: (c: { name: string; url: string; color?: string }) => post<Calendar>('/calendars', c),

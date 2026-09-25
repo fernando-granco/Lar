@@ -18,7 +18,7 @@ function friendlyError(e: unknown): string {
   return (e as Error).message || 'Something went wrong.';
 }
 
-/** Household page section: download everything as one JSON file, or restore from one. */
+/** Settings section: download everything as one JSON file, or restore from one. */
 export function BackupCard() {
   const toast = useToast();
   const qc = useQueryClient();

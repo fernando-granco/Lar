@@ -25,7 +25,7 @@ Most household apps want an account, a subscription, or your data. Lar is built 
 - A calendar that subscribes to Google/Apple/iCal feeds and publishes one back
 - A dashboard each device can rearrange, resize, and recolor for itself
 - Optional profile passwords and Cloudflare Access sign-in, kid-safe permissions, browser reminders, and local profile pictures
-- A REST API and an MCP server for trusted helpers like Hermes or Claude
+- A REST API and an MCP server for trusted helpers like Hermes or Claude, off until an adult turns them on
 
 ## Quick start
 
@@ -38,7 +38,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open `http://YOUR-SERVER:3001`, name your household, add the people who live there, and start with a shopping item or a small project. Everything else — passwords, calendars, the dashboard layout — can be set up later from the Household page.
+Open `http://YOUR-SERVER:3001`, name your household, add the people who live there, and start with a shopping item or a small project. Everything else — passwords, calendars, the dashboard layout — can be set up later in Settings.
 
 ## Guides
 

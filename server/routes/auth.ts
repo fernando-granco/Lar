@@ -5,6 +5,8 @@ import { handler, parse, idParam, notFound, badRequest, HttpError } from '../htt
 import { actorFrom, logChange } from '../context.js';
 import { getMember } from '../repo.js';
 import { hashPassword, verifyPassword, issueUnlock, revokeUnlocks, cfAccessEmail, cfAccessConfigured } from '../auth.js';
+import { isKid } from '../permissions.js';
+import type { Actor } from '../context.js';
 
 export const auth = Router();
 
@@ -58,7 +60,21 @@ auth.post(
   }),
 );
 
-/** Set or change a person's password. Changing requires the current one. */
+/**
+ * Who may manage a profile's password: the person themselves, or an adult
+ * managing a kid's profile. Kids never manage passwords, and nobody sets a
+ * password on another adult's profile (that would lock them out of it).
+ * Returns true when the current password can be skipped (an adult for a kid).
+ */
+function passwordManager(actor: Actor, target: { id: number; is_kid: number }): { skipCurrent: boolean } {
+  if (actor.type !== 'member' || !actor.id) throw new HttpError(401, 'Pick who you are on this device first.');
+  if (isKid(actor)) throw new HttpError(403, 'Kid profiles cannot add or change passwords. Ask an adult in the household.');
+  if (actor.id === target.id) return { skipCurrent: false };
+  if (target.is_kid) return { skipCurrent: true };
+  throw new HttpError(403, "Only this person can set their own password. Pick them on their device and add it there.");
+}
+
+/** Set or change a person's password. Changing your own requires the current one; an adult can reset a kid's. */
 auth.post(
   '/members/:id/password',
   handler((req) => {
@@ -66,30 +82,34 @@ auth.post(
     const row = db.prepare('SELECT id, name, is_kid, password_hash FROM members WHERE id = ?').get(id) as { id: number; name: string; is_kid: number; password_hash: string | null } | undefined;
     if (!row) throw notFound('Member not found');
     const actor = actorFrom(req);
-    if (row.is_kid && actor.type === 'member' && actor.id === id) throw new HttpError(403, 'Kid profiles cannot add or change their own password. Ask an adult in the household.');
+    const { skipCurrent } = passwordManager(actor, row);
     const body = parse(z.object({ password: z.string().min(4, 'Use at least 4 characters').max(200), current: z.string().max(200).optional() }), req.body);
-    if (row.password_hash && !verifyPassword(body.current ?? '', row.password_hash)) throw new HttpError(401, 'The current password is wrong.');
+    if (row.password_hash && !skipCurrent && !verifyPassword(body.current ?? '', row.password_hash)) throw new HttpError(401, 'The current password is wrong.');
     db.prepare('UPDATE members SET password_hash = ? WHERE id = ?').run(hashPassword(body.password), id);
     revokeUnlocks(id);
-    const token = issueUnlock(id);
-    logChange(actor, 'updated', 'household', id, `${row.name} ${row.password_hash ? 'changed' : 'added'} a profile password`);
+    // Only the person's own device is unlocked right away; an adult setting a kid's password does not unlock the kid here.
+    const token = actor.id === id ? issueUnlock(id) : null;
+    const who = actor.id === id ? row.name : `${actor.name} (for ${row.name})`;
+    logChange(actor, 'updated', 'household', id, `${who} ${row.password_hash ? 'changed' : 'added'} a profile password`);
     return { token, member: getMember(id) };
   }),
 );
 
-/** Remove a person's password. Requires the current one; the server CLI can reset it without. */
+/** Remove a person's password. Your own needs the current one; an adult can remove a kid's; the server CLI can reset any. */
 auth.delete(
   '/members/:id/password',
   handler((req, res) => {
     const id = idParam(req);
-    const row = db.prepare('SELECT id, name, password_hash FROM members WHERE id = ?').get(id) as { id: number; name: string; password_hash: string | null } | undefined;
+    const row = db.prepare('SELECT id, name, is_kid, password_hash FROM members WHERE id = ?').get(id) as { id: number; name: string; is_kid: number; password_hash: string | null } | undefined;
     if (!row) throw notFound('Member not found');
     if (!row.password_hash) throw badRequest('This person has no password.');
-    const body = parse(z.object({ current: z.string().max(200) }), req.body ?? {});
-    if (!verifyPassword(body.current, row.password_hash)) throw new HttpError(401, 'The current password is wrong.');
+    const actor = actorFrom(req);
+    const { skipCurrent } = passwordManager(actor, row);
+    const body = parse(z.object({ current: z.string().max(200).default('') }), req.body ?? {});
+    if (!skipCurrent && !verifyPassword(body.current, row.password_hash)) throw new HttpError(401, 'The current password is wrong.');
     db.prepare('UPDATE members SET password_hash = NULL WHERE id = ?').run(id);
     revokeUnlocks(id);
-    logChange(actorFrom(req), 'updated', 'household', id, `${row.name} removed their profile password`);
+    logChange(actor, 'updated', 'household', id, actor.id === id ? `${row.name} removed their profile password` : `${actor.name} removed ${row.name}'s profile password`);
     res.status(204);
   }),
 );

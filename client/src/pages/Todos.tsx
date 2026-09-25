@@ -5,7 +5,7 @@ import { Plus, CheckSquare, ChevronDown, ChevronRight, Sparkles, CalendarDays } 
 import { api } from '@/lib/api';
 import { keys, useCurrentMember, useInvalidatingMutation } from '@/lib/hooks';
 import { usePrefs, setPrefs } from '@/lib/store';
-import { today, addDays } from '@/lib/format';
+import { TASK_BUCKETS, taskBucket, getWeekStart, type TaskBucket } from '@/lib/format';
 import { parseTaskText } from '@shared/parse';
 import { Card, Button, Empty, Segmented, cx } from '@/components/ui';
 import { TaskRow } from '@/components/TaskRow';
@@ -25,27 +25,19 @@ export function Todos() {
   const [quick, setQuick] = useState('');
 
   const create = useInvalidatingMutation((text: string) => {
-    const parsed = parseTaskText(text);
-    return api.createTask({ title: parsed.title, due_date: parsed.due_date, priority: parsed.priority ?? 'normal' });
+    const parsed = parseTaskText(text, new Date(), getWeekStart());
+    return api.createTask({ title: parsed.title, due_date: parsed.due_date, due_window: parsed.due_window, due_window_start: parsed.due_window_start, priority: parsed.priority ?? 'normal' });
   }, ['tasks', 'summary']);
   const clearDone = useInvalidatingMutation(() => api.clearCompletedTasks(), ['tasks', 'summary']);
 
   const groups = useMemo(() => {
-    const t = today();
-    const week = addDays(t, 7);
     const all = tasksQ.data ?? [];
-    const open = all.filter((x) => x.status === 'open');
-    return {
-      overdue: open.filter((x) => x.due_date && x.due_date < t),
-      today: open.filter((x) => x.due_date === t),
-      week: open.filter((x) => x.due_date && x.due_date > t && x.due_date <= week),
-      later: open.filter((x) => x.due_date && x.due_date > week),
-      someday: open.filter((x) => !x.due_date),
-      done: all.filter((x) => x.status === 'done').sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')),
-    };
+    const buckets = Object.fromEntries(TASK_BUCKETS.map((b) => [b.key, [] as Task[]])) as Record<TaskBucket, Task[]>;
+    for (const x of all) if (x.status === 'open') buckets[taskBucket(x)].push(x);
+    return { buckets, done: all.filter((x) => x.status === 'done').sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')) };
   }, [tasksQ.data]);
   const projectName = (id: number | null) => projQ.data?.find((p) => p.id === id)?.name;
-  const openCount = groups.overdue.length + groups.today.length + groups.week.length + groups.later.length + groups.someday.length;
+  const openCount = Object.values(groups.buckets).reduce((n, list) => n + list.length, 0);
 
   const submitQuick = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +60,7 @@ export function Todos() {
 
   return (
     <div className="page">
-      <header className="page-head compact-mobile-head">
+      <header className="page-head">
         <div>
           <h1>To-dos</h1>
           <p className="sub">{openCount ? `${openCount} open` : 'All clear'}{mine ? ' · showing yours' : ''}</p>
@@ -84,7 +76,7 @@ export function Todos() {
 
       <form className="quick-add" onSubmit={submitQuick}>
         <Sparkles />
-        <input value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Add a to-do… try “Call plumber tomorrow !high”" aria-label="Quick add to-do" enterKeyHint="done" />
+        <input value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Add a to-do… try “Paint fence next week !high”" aria-label="Quick add to-do" enterKeyHint="done" />
         <span className="hint">Enter to add</span>
         <Button variant="primary" size="sm" type="submit" disabled={!quick.trim()}>Add</Button>
       </form>
@@ -92,11 +84,7 @@ export function Todos() {
       <Card flush>
         {tasksQ.isLoading ? null : openCount ? (
           <>
-            <Section title="Overdue" items={groups.overdue} tone="overdue" />
-            <Section title="Today" items={groups.today} tone="today" />
-            <Section title="Next 7 days" items={groups.week} />
-            <Section title="Later" items={groups.later} />
-            <Section title="Someday" items={groups.someday} />
+            {TASK_BUCKETS.map((b) => <Section key={b.key} title={b.label} items={groups.buckets[b.key]} tone={b.tone} />)}
           </>
         ) : (
           <Empty icon={CheckSquare} title={mine ? 'Nothing on your plate' : 'Nothing to do'} hint="Add something above, or enjoy the moment." />

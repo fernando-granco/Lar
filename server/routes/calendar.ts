@@ -8,6 +8,7 @@ import { handler, parse, onlySupplied, idParam, notFound, badRequest, zColor, zD
 import { actorFrom, logChange } from '../context.js';
 import { loadTasks, assignedToMemberSql, todayIso } from '../repo.js';
 import { requireHousehold } from '../auth.js';
+import { assertAdult } from '../permissions.js';
 import type { Calendar, CalendarEvent } from '../../shared/types.js';
 
 export const calendar = Router();
@@ -92,7 +93,7 @@ export function buildFeed(memberId?: number): string {
 export function feedHandler(req: import('express').Request, res: import('express').Response) {
   const token = getSetting('feed_token');
   if (!token || req.query.token !== token) {
-    res.status(403).type('text/plain').send('Invalid feed token. Copy the feed address from the Household page.');
+    res.status(403).type('text/plain').send('Invalid feed token. Copy the feed address from Lar under Settings → Connections.');
     return;
   }
   const member = req.query.member ? Number(req.query.member) : undefined;
@@ -109,7 +110,7 @@ calendar.get('/calendar/feed-info', requireHousehold({ allowKid: true }), handle
 
 calendar.post(
   '/calendar/feed-token/rotate',
-  requireHousehold({ allowKid: true }),
+  requireHousehold({ allowKid: false }),
   handler((req) => {
     const token = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('');
     setSetting('feed_token', token);
@@ -144,6 +145,7 @@ const calBody = z.object({
 calendar.post(
   '/calendars',
   handler(async (req, res) => {
+    assertAdult(actorFrom(req), 'connect calendars');
     const body = parse(calBody, req.body);
     // Try it once so a bad link fails loudly.
     try {
@@ -164,6 +166,7 @@ calendar.patch(
     const id = idParam(req);
     const cur = getCalendar(id);
     if (!cur) throw notFound('Calendar not found');
+    assertAdult(actorFrom(req), 'change calendars');
     const body = onlySupplied(req.body, parse(calBody.partial(), req.body));
     db.prepare('UPDATE calendars SET name = ?, url = ?, color = ?, enabled = ? WHERE id = ?').run(body.name ?? cur.name, body.url ?? cur.url, body.color ?? cur.color, (body.enabled ?? cur.enabled) ? 1 : 0, id);
     if (body.url && body.url !== cur.url) cache.delete(cur.url);
@@ -178,6 +181,7 @@ calendar.delete(
     const id = idParam(req);
     const cur = getCalendar(id);
     if (!cur) throw notFound('Calendar not found');
+    assertAdult(actorFrom(req), 'remove calendars');
     db.prepare('DELETE FROM calendars WHERE id = ?').run(id);
     cache.delete(cur.url);
     logChange(actorFrom(req), 'deleted', 'household', id, `Removed calendar "${cur.name}"`);

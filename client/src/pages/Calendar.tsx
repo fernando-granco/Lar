@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Plus, Milestone as MilestoneIcon, Target, Cl
 import { api } from '@/lib/api';
 import { useHousehold, useCurrentMember } from '@/lib/hooks';
 import { usePrefs, setPrefs } from '@/lib/store';
-import { today, addDays, parseIso, friendlyDate } from '@/lib/format';
+import { today, addDays, parseIso, friendlyDate, dayHeading } from '@/lib/format';
 import { isoDate } from '@shared/parse';
 import { Card, Button, Segmented, Empty, IconButton, cx } from '@/components/ui';
 import { TaskRow } from '@/components/TaskRow';
@@ -98,7 +98,7 @@ export function CalendarPage() {
         </div>
       </Card>
 
-      <Card title={friendlyDate(selected)} icon={CalendarDays} flush action={<Button size="sm" icon={Plus} onClick={() => setEdit('new')}>To-do on this day</Button>}>
+      <Card title={dayHeading(selected)} icon={CalendarDays} flush action={<Button size="sm" icon={Plus} onClick={() => setEdit('new')}>To-do on this day</Button>}>
         {day.tasks.length + day.milestones.length + day.projects.length + day.events.length === 0 ? (
           <Empty icon={CalendarDays} title="Nothing on this day" />
         ) : (

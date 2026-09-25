@@ -1,8 +1,8 @@
 /* Lar service worker: makes the app installable and keeps the shell loading
    when the network is slow. Data always comes from the server. */
-const VERSION = 'lar-v5';
+const VERSION = 'lar-v6';
 const CORE = [
-  '/', '/today', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png',
+  '/', '/today', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png',
   '/fonts/dm-mono-400.woff2', '/fonts/dm-mono-500.woff2', '/fonts/dm-sans-variable.woff2', '/fonts/playfair-display-variable.woff2',
 ];
 
@@ -63,5 +63,17 @@ self.addEventListener('fetch', (event) => {
         return res;
       })
       .catch(() => caches.match(req.mode === 'navigate' ? '/' : req)),
+  );
+});
+
+// Tapping a reminder brings Lar to the front, or opens it.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (open) return open.focus();
+      return self.clients.openWindow('/today');
+    }),
   );
 });

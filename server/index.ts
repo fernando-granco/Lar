@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dataDir, isDist } from './db.js';
 import { errorMiddleware } from './http.js';
-import { household } from './routes/household.js';
+import { household, agentAccessEnabled } from './routes/household.js';
 import { tasks } from './routes/tasks.js';
 import { shopping } from './routes/shopping.js';
 import { projects } from './routes/projects.js';
@@ -66,9 +66,14 @@ app.use('/api', (_req, res, next) => {
 // Keep Lar off the public internet, or put an auth proxy such as Cloudflare
 // Access in front of it.
 app.use(['/api', '/mcp'], (req, res, next) => {
-  if (!agentKeyConfigured) return next();
   const isAgent = req.path.startsWith('/mcp') || req.baseUrl.startsWith('/mcp') || !!req.header('x-lar-agent');
   if (!isAgent) return next();
+  // Agent access is opt-in: an adult turns it on in Settings → Connections.
+  if (!agentAccessEnabled()) {
+    res.status(403).json({ error: 'Agent access is turned off. An adult can turn it on in Lar under Settings → Connections.', code: 'agent_access_off' });
+    return;
+  }
+  if (!agentKeyConfigured) return next();
   if (agentKeyMatches(suppliedAgentKey(req))) return next();
   res.status(401).json({ error: 'A valid agent API key is required (LAR_API_KEY).' });
 });

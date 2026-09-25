@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { api, type TaskInput } from '@/lib/api';
-import { useHousehold, useInvalidatingMutation } from '@/lib/hooks';
-import { today, addDays } from '@/lib/format';
+import { useHousehold, useInvalidatingMutation, usePermissions } from '@/lib/hooks';
+import { today, addDays, getWeekStart, friendlyDate } from '@/lib/format';
+import { softDue, windowEnd } from '@shared/parse';
 import { useToast } from './Toast';
 import { Sheet, Confirm } from './Sheet';
 import { Button, Field, Input, Select, TextArea, Segmented, Chip } from './ui';
 import { AssigneePicker } from './AssigneePicker';
-import type { Task, Project, Milestone, Recurrence, TaskPriority } from '@shared/types';
+import type { Task, Project, Milestone, Recurrence, TaskPriority, DueWindow } from '@shared/types';
 
 type Draft = {
   title: string;
@@ -15,6 +16,8 @@ type Draft = {
   priority: TaskPriority;
   due_date: string | null;
   due_time: string | null;
+  due_window: DueWindow | null;
+  due_window_start: string | null;
   recurrence: Recurrence | null;
   project_id: number | null;
   milestone_id: number | null;
@@ -27,6 +30,8 @@ const blank = (init?: Partial<Draft>): Draft => ({
   priority: 'normal',
   due_date: null,
   due_time: null,
+  due_window: null,
+  due_window_start: null,
   recurrence: null,
   project_id: null,
   milestone_id: null,
@@ -58,6 +63,7 @@ export function TaskSheet({
   milestones?: Milestone[];
 }) {
   const { data: household } = useHousehold();
+  const { can } = usePermissions();
   const toast = useToast();
   const [draft, setDraft] = useState<Draft>(blank());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -66,8 +72,8 @@ export function TaskSheet({
   useEffect(() => {
     if (!open) return;
     if (task) {
-      const { title, notes, priority, due_date, due_time, recurrence, project_id, milestone_id, assignees } = task;
-      setDraft({ title, notes, priority, due_date, due_time, recurrence, project_id, milestone_id, assignees });
+      const { title, notes, priority, due_date, due_time, due_window, due_window_start, recurrence, project_id, milestone_id, assignees } = task;
+      setDraft({ title, notes, priority, due_date, due_time, due_window, due_window_start, recurrence, project_id, milestone_id, assignees });
     } else setDraft(blank({ project_id: fixedProject?.id ?? null, assignees: fixedProject?.memberIds?.length ? { member_ids: fixedProject.memberIds, group_ids: [] } : { member_ids: [], group_ids: [] }, ...initial }));
     setError('');
   }, [open, task, initial, fixedProject?.id]);
@@ -76,7 +82,7 @@ export function TaskSheet({
     const body: TaskInput = { ...d };
     if (task) return api.updateTask(task.id, body);
     return api.createTask({ ...body, title: d.title });
-  }, ['tasks', 'project', 'projects', 'summary']);
+  }, ['tasks', 'project', 'projects', 'summary'], { inlineErrors: true });
   const remove = useInvalidatingMutation(() => api.deleteTask(task!.id), ['tasks', 'project', 'projects', 'summary']);
 
   const submit = async (e: React.FormEvent) => {
@@ -93,6 +99,12 @@ export function TaskSheet({
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
   const t = today();
+  const setDay = (due_date: string | null) => set({ due_date, due_window: null, due_window_start: null, ...(due_date ? {} : { due_time: null }) });
+  const setSoft = (which: Parameters<typeof softDue>[0]) => set({ ...softDue(which, new Date(), getWeekStart()), due_date: null, due_time: null });
+  const isSoft = (which: Parameters<typeof softDue>[0]) => {
+    const s = softDue(which, new Date(), getWeekStart());
+    return draft.due_window === s.due_window && draft.due_window_start === s.due_window_start;
+  };
   const availableMilestones = fixedProject?.milestones ?? milestones ?? [];
   const showProjectSelect = !fixedProject && projects && projects.length > 0;
 
@@ -104,7 +116,7 @@ export function TaskSheet({
         title={task ? 'Edit to-do' : 'New to-do'}
         footer={
           <>
-            {task && <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(true)}>Delete</Button>}
+            {task && can('todos', task.created_by) && <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(true)}>Delete</Button>}
             <Button variant="primary" className="right" type="submit" form="task-form" disabled={save.isPending}>
               {task ? 'Save changes' : 'Add to-do'}
             </Button>
@@ -118,13 +130,21 @@ export function TaskSheet({
 
           <Field label="When">
             <div className="chip-row" style={{ marginBottom: 8 }}>
-              <Chip on={draft.due_date === t} onClick={() => set({ due_date: t })}>Today</Chip>
-              <Chip on={draft.due_date === addDays(t, 1)} onClick={() => set({ due_date: addDays(t, 1) })}>Tomorrow</Chip>
-              <Chip on={draft.due_date === addDays(t, 7)} onClick={() => set({ due_date: addDays(t, 7) })}>Next week</Chip>
-              <Chip on={draft.due_date === null} onClick={() => set({ due_date: null, due_time: null })}>No date</Chip>
+              <Chip on={draft.due_date === t} onClick={() => setDay(t)}>Today</Chip>
+              <Chip on={draft.due_date === addDays(t, 1)} onClick={() => setDay(addDays(t, 1))}>Tomorrow</Chip>
+              <Chip on={isSoft('this_week')} onClick={() => setSoft('this_week')}>This week</Chip>
+              <Chip on={isSoft('next_week')} onClick={() => setSoft('next_week')}>Next week</Chip>
+              <Chip on={isSoft('this_month')} onClick={() => setSoft('this_month')}>This month</Chip>
+              <Chip on={isSoft('next_month')} onClick={() => setSoft('next_month')}>Next month</Chip>
+              <Chip on={draft.due_date === null && draft.due_window === null} onClick={() => setDay(null)}>No date</Chip>
             </div>
+            {draft.due_window && draft.due_window_start ? (
+              <p className="soft-due-note">
+                Any day from {friendlyDate(draft.due_window_start, { relative: false })} to {friendlyDate(windowEnd(draft.due_window, draft.due_window_start), { relative: false })}. Pick a date below to set an exact day instead.
+              </p>
+            ) : null}
             <div className="form-grid">
-              <Input type="date" value={draft.due_date ?? ''} onChange={(e) => set({ due_date: e.target.value || null })} />
+              <Input type="date" value={draft.due_date ?? ''} onChange={(e) => setDay(e.target.value || null)} aria-label="Date" />
               <Input type="time" value={draft.due_time ?? ''} onChange={(e) => set({ due_time: e.target.value || null })} disabled={!draft.due_date} aria-label="Time" />
             </div>
           </Field>

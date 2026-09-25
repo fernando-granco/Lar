@@ -4,6 +4,7 @@ import { db, nowIso } from '../db.js';
 import { handler, parse, onlySupplied, idParam, notFound, badRequest, zAssignees, zIdList } from '../http.js';
 import { actorFrom, logChange, type Actor } from '../context.js';
 import { loadShoppingItems, getShoppingItem, setAssignees, assignedToMemberSql, rememberPurchase } from '../repo.js';
+import { assertKidMay } from '../permissions.js';
 import type { ShoppingItem, ShoppingList } from '../../shared/types.js';
 
 export const shopping = Router();
@@ -28,6 +29,7 @@ shopping.get('/shopping/lists', handler(() => listShoppingLists()));
 const listNameBody = z.object({ name: z.string().trim().min(1).max(60) });
 
 export function createShoppingList(input: unknown, actor: Actor): ShoppingList {
+  assertKidMay(actor, 'shopping');
   const body = parse(listNameBody, input);
   const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM shopping_lists WHERE project_id IS NULL').get() as any).n;
   const id = Number(db.prepare('INSERT INTO shopping_lists (name, sort_order) VALUES (?, ?)').run(body.name, order).lastInsertRowid);
@@ -46,6 +48,7 @@ shopping.post(
 export function renameShoppingList(id: number, input: unknown, actor: Actor): ShoppingList {
   const current = getShoppingList(id);
   if (!current) throw notFound('List not found');
+  assertKidMay(actor, 'shopping');
   const body = parse(listNameBody, input);
   db.prepare('UPDATE shopping_lists SET name = ? WHERE id = ?').run(body.name, id);
   logChange(actor, 'updated', 'shopping', id, `Renamed list to "${body.name}"`);
@@ -59,6 +62,7 @@ export function deleteShoppingList(id: number, actor: Actor) {
   if (!current) throw notFound('List not found');
   if (id === 1) throw badRequest('The Household list cannot be deleted');
   if (current.project_id) throw badRequest('Project lists are removed with their project');
+  assertKidMay(actor, 'shopping');
   db.prepare('DELETE FROM shopping_lists WHERE id = ?').run(id);
   cleanAssignments();
   logChange(actor, 'deleted', 'shopping', id, `Deleted list "${current.name}"`);
@@ -154,6 +158,8 @@ export function updateShoppingItem(id: number, input: unknown, actor: Actor): Sh
   const current = getShoppingItem(id);
   if (!current) throw notFound('Item not found');
   const body = onlySupplied(input, parse(itemBody.partial().extend({ checked: z.boolean().optional() }), input));
+  // Anyone can tick an item off; changing it needs to be yours (or kids allowed to).
+  if (Object.keys(body).some((k) => k !== 'checked')) assertKidMay(actor, 'shopping', current.created_by);
   const next = { ...current, ...body };
   if (body.list_id && !db.prepare('SELECT 1 FROM shopping_lists WHERE id = ?').get(body.list_id)) throw badRequest('List does not exist');
   db.prepare(
@@ -189,6 +195,7 @@ shopping.post('/shopping/items/:id/uncheck', handler((req) => setChecked(idParam
 export function deleteShoppingItem(id: number, actor: Actor) {
   const current = getShoppingItem(id);
   if (!current) throw notFound('Item not found');
+  assertKidMay(actor, 'shopping', current.created_by);
   db.prepare('DELETE FROM shopping_items WHERE id = ?').run(id);
   cleanAssignments();
   logChange(actor, 'deleted', 'shopping', id, `Removed "${current.name}" from the shopping list`);
@@ -206,6 +213,7 @@ shopping.post(
   '/shopping/items/reorder',
   handler((req) => {
     const { ids } = parse(z.object({ ids: zIdList }), req.body);
+    assertKidMay(actorFrom(req), 'shopping');
     const upd = db.prepare('UPDATE shopping_items SET sort_order = ? WHERE id = ?');
     db.transaction(() => ids.forEach((id, i) => upd.run(i, id)))();
     logChange(actorFrom(req), 'reordered', 'shopping', null, 'Reordered shopping items');

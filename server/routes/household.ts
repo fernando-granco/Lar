@@ -5,6 +5,7 @@ import { handler, parse, onlySupplied, idParam, notFound, badRequest, HttpError,
 import { actorFrom, logChange } from '../context.js';
 import { listMembers, listGroups, getMember } from '../repo.js';
 import { cfAccessEmail } from '../auth.js';
+import { assertAdult, assertKeepsAnAdult, isKid, kidPermissions } from '../permissions.js';
 import type { Household } from '../../shared/types.js';
 
 export const household = Router();
@@ -20,10 +21,17 @@ export function loadHousehold(accessSignIn = false): Household {
       allow_private_calendar_urls: getSetting('allow_private_calendar_urls', '0') === '1',
       access_sign_in: accessSignIn,
       recipes_enabled: true,
+      agent_access: agentAccessEnabled(),
+      kid_permissions: kidPermissions(),
     },
     members: listMembers(),
     groups: listGroups(),
   };
+}
+
+/** Agents (MCP) and API callers that identify as agents are opt-in. LAR_AGENT_ACCESS=1 forces them on. */
+export function agentAccessEnabled() {
+  return process.env.LAR_AGENT_ACCESS === '1' || getSetting('agent_access', '0') === '1';
 }
 
 household.get('/household', handler(async (req) => loadHousehold(Boolean(await cfAccessEmail(req)))));
@@ -39,11 +47,22 @@ household.patch(
         currency: z.string().trim().length(3).toUpperCase().optional(),
         week_starts_on: z.enum(['monday', 'sunday']).optional(),
         allow_private_calendar_urls: z.boolean().optional(),
+        agent_access: z.boolean().optional(),
+        kid_permissions: z
+          .object({ todos: z.boolean(), shopping: z.boolean(), projects: z.boolean(), recipes: z.boolean() })
+          .partial()
+          .optional(),
       }),
       req.body,
     );
-    for (const [k, v] of Object.entries(body)) if (v !== undefined) setSetting(k, typeof v === 'boolean' ? (v ? '1' : '0') : v);
-    logChange(actorFrom(req), 'updated', 'household', null, 'Updated household settings');
+    const actor = actorFrom(req);
+    assertAdult(actor, 'change household settings');
+    if (body.agent_access !== undefined && actor.type !== 'member') throw new HttpError(403, 'Only a household member can turn agent access on or off, from Settings.');
+    const { kid_permissions, ...plain } = body;
+    for (const [k, v] of Object.entries(plain)) if (v !== undefined) setSetting(k, typeof v === 'boolean' ? (v ? '1' : '0') : v);
+    for (const [k, v] of Object.entries(kid_permissions ?? {})) if (v !== undefined) setSetting(`kids_can_${k}`, v ? '1' : '0');
+    const what = body.agent_access !== undefined ? (body.agent_access ? 'Turned on agent access' : 'Turned off agent access') : kid_permissions ? 'Changed what kids can do' : 'Updated household settings';
+    logChange(actor, 'updated', 'household', null, what);
     return loadHousehold(Boolean(await cfAccessEmail(req))).settings;
   }),
 );
@@ -59,13 +78,6 @@ const memberBody = z.object({
   is_kid: z.boolean().optional(),
 });
 
-function kidActor(req: import('express').Request) {
-  const actor = actorFrom(req);
-  if (actor.type !== 'member' || !actor.id) return null;
-  const member = getMember(actor.id);
-  return member?.is_kid ? member : null;
-}
-
 const initialsFor = (name: string) =>
   name
     .split(/\s+/)
@@ -77,7 +89,7 @@ const initialsFor = (name: string) =>
 household.post(
   '/members',
   handler((req, res) => {
-    if (kidActor(req)) throw new HttpError(403, 'Kid profiles cannot add people. Ask an adult in the household.');
+    assertAdult(actorFrom(req), 'add people');
     const body = parse(memberBody, req.body);
     const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM members').get() as any).n;
     const result = db
@@ -97,8 +109,15 @@ household.patch(
     const current = getMember(id);
     if (!current) throw notFound('Member not found');
     const body = onlySupplied(req.body, parse(memberBody.partial().extend({ archived: z.boolean().optional(), sort_order: z.number().int().optional() }), req.body));
-    const kid = kidActor(req);
-    if (kid && body.is_kid !== undefined && body.is_kid !== current.is_kid) throw new HttpError(403, 'Kid profiles cannot change family permission levels.');
+    const actor = actorFrom(req);
+    if (isKid(actor)) {
+      // Kids can change how their own profile looks, and nothing else about people.
+      if (actor.id !== id) throw new HttpError(403, "Kid profiles cannot change other people's profiles. Ask an adult in the household.");
+      const allowed = new Set(['name', 'color', 'initials', 'avatar_url']);
+      const changing = Object.keys(body).filter((k) => !allowed.has(k) && (body as Record<string, unknown>)[k] !== (current as unknown as Record<string, unknown>)[k]);
+      if (changing.length) throw new HttpError(403, 'Kid profiles can change their name, color, and picture. Ask an adult for anything else.');
+    }
+    if (!current.is_kid && (body.is_kid === true || body.archived === true)) assertKeepsAnAdult(id);
     db.prepare('UPDATE members SET name = ?, color = ?, initials = ?, archived = ?, sort_order = ?, email = ?, is_kid = ?, avatar_url = ? WHERE id = ?').run(
       body.name ?? current.name,
       body.color ?? current.color,
@@ -122,8 +141,8 @@ household.delete(
     const id = idParam(req);
     const current = getMember(id);
     if (!current) throw notFound('Member not found');
-    const kid = kidActor(req);
-    if (kid?.id === id) throw new HttpError(403, 'Kid profiles cannot remove themselves. Ask an adult in the household.');
+    assertAdult(actorFrom(req), 'remove people');
+    if (!current.is_kid) assertKeepsAnAdult(id);
     db.prepare('DELETE FROM members WHERE id = ?').run(id);
     logChange(actorFrom(req), 'deleted', 'household', id, `Removed ${current.name} from the household`);
     res.status(204);
@@ -134,6 +153,7 @@ household.post(
   '/members/reorder',
   handler((req) => {
     const { ids } = parse(z.object({ ids: zIdList }), req.body);
+    assertAdult(actorFrom(req), 'reorder people');
     const upd = db.prepare('UPDATE members SET sort_order = ? WHERE id = ?');
     db.transaction(() => ids.forEach((id, i) => upd.run(i, id)))();
     logChange(actorFrom(req), 'reordered', 'household', null, 'Reordered members');
@@ -158,6 +178,7 @@ function setGroupMembers(groupId: number, memberIds: number[]) {
 household.post(
   '/groups',
   handler((req, res) => {
+    assertAdult(actorFrom(req), 'manage groups');
     const body = parse(groupBody, req.body);
     const order = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM groups').get() as any).n;
     const id = Number(db.prepare('INSERT INTO groups (name, color, sort_order) VALUES (?, ?, ?)').run(body.name, body.color ?? '#7c6f9b', order).lastInsertRowid);
@@ -174,6 +195,7 @@ household.patch(
     const id = idParam(req);
     const current = listGroups().find((g) => g.id === id);
     if (!current) throw notFound('Group not found');
+    assertAdult(actorFrom(req), 'manage groups');
     const body = onlySupplied(req.body, parse(groupBody.partial(), req.body));
     db.prepare('UPDATE groups SET name = ?, color = ? WHERE id = ?').run(body.name ?? current.name, body.color ?? current.color, id);
     if (body.member_ids) setGroupMembers(id, body.member_ids);
@@ -188,6 +210,7 @@ household.delete(
     const id = idParam(req);
     const current = listGroups().find((g) => g.id === id);
     if (!current) throw notFound('Group not found');
+    assertAdult(actorFrom(req), 'manage groups');
     db.prepare('DELETE FROM groups WHERE id = ?').run(id);
     logChange(actorFrom(req), 'deleted', 'household', id, `Deleted group ${current.name}`);
     res.status(204);

@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { db, nowIso } from '../db.js';
 import { handler, parse, onlySupplied, idParam, notFound, badRequest, zDate, zTime, zAssignees, zIdList } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
-import { loadTasks, getTask, setAssignees, assignedToMemberSql, nextDueDate, todayIso } from '../repo.js';
-import type { Task } from '../../shared/types.js';
+import { loadTasks, getTask, setAssignees, assignedToMemberSql, nextDueDate, todayIso, taskDueBySql, snapToWindow } from '../repo.js';
+import { assertKidMay } from '../permissions.js';
+import type { Task, DueWindow } from '../../shared/types.js';
 
 export const tasks = Router();
 
@@ -22,6 +23,8 @@ const taskBody = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
   due_date: zDate.nullable().default(null),
   due_time: zTime.nullable().default(null),
+  due_window: z.enum(['week', 'month']).nullable().default(null),
+  due_window_start: zDate.nullable().default(null),
   recurrence: zRecurrence.default(null),
   project_id: z.number().int().positive().nullable().default(null),
   milestone_id: z.number().int().positive().nullable().default(null),
@@ -50,21 +53,42 @@ export function taskFilter(q: z.infer<typeof listQuery>) {
   if (q.milestone) (where.push('t.milestone_id = @milestone'), (params.milestone = q.milestone));
   if (q.member) (where.push(assignedToMemberSql('task', 't')), (params.member = q.member));
   const today = todayIso();
+  const dueBy = taskDueBySql('t');
   if (q.due === 'today') (where.push('t.due_date = @today'), (params.today = today));
-  if (q.due === 'overdue') (where.push("t.due_date < @today AND t.status = 'open'"), (params.today = today));
+  if (q.due === 'overdue') (where.push(`${dueBy} < @today AND t.status = 'open'`), (params.today = today));
   if (q.due === 'week') {
-    const end = new Date();
-    end.setDate(end.getDate() + 7);
-    where.push('t.due_date >= @today AND t.due_date <= @weekEnd');
+    // Dated in the next seven days, or a "this week" to-do whose week overlaps them.
+    where.push(`((t.due_date >= @today AND t.due_date <= @weekEnd) OR (t.due_window = 'week' AND t.due_window_start <= @weekEnd AND ${dueBy} >= @today))`);
     params.today = today;
-    params.weekEnd = end.toISOString().slice(0, 10);
+    params.weekEnd = addDaysIso(today, 7);
   }
-  if (q.due === 'none') where.push('t.due_date IS NULL');
-  if (q.due === 'scheduled') where.push('t.due_date IS NOT NULL');
-  if (q.from) (where.push('t.due_date >= @from'), (params.from = q.from));
-  if (q.to) (where.push('t.due_date <= @to'), (params.to = q.to));
+  if (q.due === 'none') where.push('t.due_date IS NULL AND t.due_window IS NULL');
+  if (q.due === 'scheduled') where.push('(t.due_date IS NOT NULL OR t.due_window IS NOT NULL)');
+  if (q.from) (where.push(`${dueBy} >= @from`), (params.from = q.from));
+  if (q.to) (where.push(`${dueBy} <= @to`), (params.to = q.to));
   if (q.q) (where.push('(t.title LIKE @q OR t.notes LIKE @q)'), (params.q = `%${q.q}%`));
   return { where: where.length ? where.join(' AND ') : '1=1', params, limit: q.limit };
+}
+
+function addDaysIso(iso: string, n: number) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+type DueFields = { due_date: string | null; due_time: string | null; due_window: DueWindow | null; due_window_start: string | null };
+
+/**
+ * A to-do is due on a day or within a soft window, never both. Setting one
+ * clears the other; a window always starts on the first day of its week or month.
+ */
+function normalizeDue<T extends DueFields>(next: T, changed: Partial<DueFields>): T {
+  if (changed.due_date) return { ...next, due_window: null, due_window_start: null };
+  if (next.due_window && (changed.due_window || changed.due_window_start)) {
+    return { ...next, due_date: null, due_time: null, due_window_start: snapToWindow(next.due_window, next.due_window_start ?? todayIso()) };
+  }
+  if (!next.due_window) return { ...next, due_window_start: null, due_time: next.due_date ? next.due_time : null };
+  return next;
 }
 
 export function queryTasks(q: z.infer<typeof listQuery>): Task[] {
@@ -85,7 +109,8 @@ tasks.get(
 );
 
 export function createTask(input: z.input<typeof taskBody>, actor: ReturnType<typeof actorFrom>): Task {
-  const body = parse(taskBody, input);
+  const parsed = parse(taskBody, input);
+  const body = normalizeDue(parsed, parsed);
   if (body.project_id && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(body.project_id)) throw badRequest('Project does not exist');
   if (body.milestone_id) {
     const ms = db.prepare('SELECT project_id FROM milestones WHERE id = ?').get(body.milestone_id) as any;
@@ -97,8 +122,8 @@ export function createTask(input: z.input<typeof taskBody>, actor: ReturnType<ty
   const id = Number(
     db
       .prepare(
-        `INSERT INTO tasks (title, notes, priority, due_date, due_time, recurrence, project_id, milestone_id, sort_order, created_by)
-         VALUES (@title, @notes, @priority, @due_date, @due_time, @recurrence, @project_id, @milestone_id, @order, @created_by)`,
+        `INSERT INTO tasks (title, notes, priority, due_date, due_time, due_window, due_window_start, recurrence, project_id, milestone_id, sort_order, created_by)
+         VALUES (@title, @notes, @priority, @due_date, @due_time, @due_window, @due_window_start, @recurrence, @project_id, @milestone_id, @order, @created_by)`,
       )
       .run({
         ...body,
@@ -125,11 +150,12 @@ export function updateTask(id: number, input: unknown, actor: ReturnType<typeof 
   const current = getTask(id);
   if (!current) throw notFound('Task not found');
   const body = onlySupplied(input, parse(taskBody.partial().extend({ status: z.enum(['open', 'done']).optional() }), input));
-  const next = { ...current, ...body, assignees: body.assignees ?? current.assignees };
   if (body.status && body.status !== current.status) return setDone(id, body.status === 'done', actor);
+  assertKidMay(actor, 'todos', current.created_by);
+  const next = normalizeDue({ ...current, ...body, assignees: body.assignees ?? current.assignees }, body);
   db.prepare(
-    `UPDATE tasks SET title=@title, notes=@notes, priority=@priority, due_date=@due_date, due_time=@due_time, recurrence=@recurrence,
-       project_id=@project_id, milestone_id=@milestone_id, updated_at=@now WHERE id=@id`,
+    `UPDATE tasks SET title=@title, notes=@notes, priority=@priority, due_date=@due_date, due_time=@due_time, due_window=@due_window,
+       due_window_start=@due_window_start, recurrence=@recurrence, project_id=@project_id, milestone_id=@milestone_id, updated_at=@now WHERE id=@id`,
   ).run({
     id,
     title: next.title,
@@ -137,6 +163,8 @@ export function updateTask(id: number, input: unknown, actor: ReturnType<typeof 
     priority: next.priority,
     due_date: next.due_date,
     due_time: next.due_time,
+    due_window: next.due_window,
+    due_window_start: next.due_window_start,
     recurrence: next.recurrence ? JSON.stringify(next.recurrence) : null,
     project_id: next.project_id,
     milestone_id: next.milestone_id,
@@ -163,15 +191,17 @@ export function setDone(id: number, done: boolean, actor: ReturnType<typeof acto
     id,
   );
   if (done && current.recurrence) {
-    const base = current.due_date ?? todayIso();
-    const dueNext = nextDueDate(base, current.recurrence);
+    const window = current.due_window;
+    const base = current.due_date ?? current.due_window_start ?? todayIso();
+    // A soft to-do repeats into the week or month its next occurrence falls in.
+    const dueNext = window ? snapToWindow(window, nextDueDate(base, current.recurrence)) : nextDueDate(base, current.recurrence);
     const nextId = Number(
       db
         .prepare(
-          `INSERT INTO tasks (title, notes, priority, due_date, due_time, recurrence, project_id, milestone_id, sort_order, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO tasks (title, notes, priority, due_date, due_time, due_window, due_window_start, recurrence, project_id, milestone_id, sort_order, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(current.title, current.notes, current.priority, dueNext, current.due_time, JSON.stringify(current.recurrence), current.project_id, current.milestone_id, current.sort_order, current.created_by)
+        .run(current.title, current.notes, current.priority, window ? null : dueNext, window ? null : current.due_time, window, window ? dueNext : null, JSON.stringify(current.recurrence), current.project_id, current.milestone_id, current.sort_order, current.created_by)
         .lastInsertRowid,
     );
     setAssignees('task', nextId, current.assignees);
@@ -190,6 +220,7 @@ tasks.post('/tasks/:id/reopen', handler((req) => setDone(idParam(req), false, ac
 export function deleteTask(id: number, actor: ReturnType<typeof actorFrom>) {
   const current = getTask(id);
   if (!current) throw notFound('Task not found');
+  assertKidMay(actor, 'todos', current.created_by);
   db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
   db.prepare("DELETE FROM assignments WHERE entity_type = 'task' AND entity_id = ?").run(id);
   logChange(actor, 'deleted', 'task', id, `Deleted to-do "${current.title}"`);
@@ -207,6 +238,7 @@ tasks.post(
   '/tasks/reorder',
   handler((req) => {
     const { ids } = parse(z.object({ ids: zIdList }), req.body);
+    assertKidMay(actorFrom(req), 'todos');
     const upd = db.prepare('UPDATE tasks SET sort_order = ? WHERE id = ?');
     db.transaction(() => ids.forEach((id, i) => upd.run(i, id)))();
     logChange(actorFrom(req), 'reordered', 'task', null, 'Reordered to-dos');
@@ -218,6 +250,7 @@ tasks.post(
   '/tasks/clear-completed',
   handler((req) => {
     const q = parse(z.object({ project: z.coerce.number().int().positive().optional() }), req.body ?? {});
+    assertKidMay(actorFrom(req), 'todos');
     const info = q.project
       ? db.prepare("DELETE FROM tasks WHERE status = 'done' AND project_id = ?").run(q.project)
       : db.prepare("DELETE FROM tasks WHERE status = 'done' AND project_id IS NULL").run();

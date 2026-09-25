@@ -55,5 +55,8 @@ export function logChange(
     id: entityId ?? undefined,
     action: (known.includes(action as ChangeEvent['action']) ? action : 'updated') as ChangeEvent['action'],
     actor: actor.name,
+    actor_type: actor.type,
+    actor_id: actor.id,
+    summary,
   });
 }

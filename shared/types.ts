@@ -6,6 +6,8 @@ export type TaskStatus = 'open' | 'done';
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type ShoppingPriority = TaskPriority;
 export type RecurrenceFreq = 'daily' | 'weekly' | 'monthly' | 'yearly';
+/** A soft due date: sometime this week, next month, ... without a hard day. */
+export type DueWindow = 'week' | 'month';
 
 export interface Recurrence {
   freq: RecurrenceFreq;
@@ -48,7 +50,25 @@ export interface Settings {
   access_sign_in: boolean;
   /** Kept for compatibility with older Lar backups; recipes are now always available. */
   recipes_enabled: boolean;
+  /** Opt-in: lets AI agents (MCP at /mcp) and scripts that identify as agents use Lar. */
+  agent_access: boolean;
+  /** What kid profiles may change beyond their own things. Adults set these. */
+  kid_permissions: KidPermissions;
 }
+
+/** Kids can always add to-dos and shopping items, check things off, and edit what they created. These widen that. */
+export interface KidPermissions {
+  /** Edit and delete anyone's to-dos. */
+  todos: boolean;
+  /** Edit and delete anyone's shopping items, and manage lists. */
+  shopping: boolean;
+  /** Change projects they did not start: details, milestones, budget, links, and notes. */
+  projects: boolean;
+  /** Change recipes they did not add, and plan the weekly menu. */
+  recipes: boolean;
+}
+
+export type KidPermission = keyof KidPermissions;
 
 export interface Household {
   settings: Settings;
@@ -70,6 +90,10 @@ export interface Task {
   priority: TaskPriority;
   due_date: string | null;
   due_time: string | null;
+  /** Set instead of due_date for "this week", "next month", ... */
+  due_window: DueWindow | null;
+  /** First day of that week or month (YYYY-MM-DD). */
+  due_window_start: string | null;
   recurrence: Recurrence | null;
   project_id: number | null;
   milestone_id: number | null;
@@ -140,6 +164,31 @@ export interface ProjectLink {
   sort_order: number;
 }
 
+export interface ProjectNote {
+  id: number;
+  project_id: number;
+  title: string;
+  body: string;
+  color: string;
+  pinned: boolean;
+  /** Show on the project's overview tab. */
+  show_on_overview: boolean;
+  /** Show on the Today dashboard of the people who can see it. */
+  show_on_today: boolean;
+  /** Who can see it. Empty means everyone. The author always can. */
+  member_ids: number[];
+  sort_order: number;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A note pinned to the Today dashboard, with its project for context. */
+export interface TodayNote extends ProjectNote {
+  project_name: string;
+  project_color: string;
+}
+
 export interface Project {
   id: number;
   name: string;
@@ -153,6 +202,7 @@ export interface Project {
   target_date: string | null;
   completed_at: string | null;
   budget: number | null;
+  /** Legacy single note. Project notes now live in ProjectDetail.project_notes. */
   notes: string;
   sort_order: number;
   archived: boolean;
@@ -177,6 +227,7 @@ export interface ProjectDetail extends Project {
   shopping_items: ShoppingItem[];
   expenses: Expense[];
   links: ProjectLink[];
+  project_notes: ProjectNote[];
 }
 
 export interface Activity {
@@ -206,6 +257,10 @@ export interface ChangeEvent {
   id?: number;
   action: 'created' | 'updated' | 'deleted' | 'reordered';
   actor?: string;
+  actor_type?: 'member' | 'agent' | 'system';
+  actor_id?: number | null;
+  /** The same human sentence the activity log records, e.g. 'Added to-do "Call plumber"'. */
+  summary?: string;
 }
 
 export interface Recipe {

@@ -7,17 +7,17 @@ import type { Express, Request, Response } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { db } from './db.js';
+import { db, getSetting } from './db.js';
 import type { Actor } from './context.js';
 import { HttpError } from './http.js';
 import { listMembers, listGroups, todayIso } from './repo.js';
 import { loadHousehold } from './routes/household.js';
 import { queryTasks, createTask, updateTask, setDone, deleteTask } from './routes/tasks.js';
 import { listShoppingLists, createShoppingList, renameShoppingList, deleteShoppingList, queryShoppingItems, createShoppingItem, updateShoppingItem, setChecked, deleteShoppingItem, clearChecked } from './routes/shopping.js';
-import { queryProjects, getProjectDetail, createProject, updateProject, deleteProject, createMilestone, updateMilestone, deleteMilestone, createExpense, updateExpense, deleteExpense } from './routes/projects.js';
+import { queryProjects, getProjectDetail, createProject, updateProject, deleteProject, createMilestone, updateMilestone, deleteMilestone, createExpense, updateExpense, deleteExpense, createProjectNote, updateProjectNote, deleteProjectNote } from './routes/projects.js';
 import { summary } from './routes/misc.js';
 import { listRecipes, createRecipe, updateRecipe, deleteRecipe, listMenu, upsertMenuEntry, deleteMenuEntry, createMenuRule, listMenuRules, deleteMenuRule } from './routes/recipes.js';
-import { parseShoppingText, parseTaskText } from '../shared/parse.js';
+import { parseShoppingText, parseTaskText, softDue, type WeekStart } from '../shared/parse.js';
 import type { Assignees, Task, ShoppingItem, Project } from '../shared/types.js';
 
 // ---------- helpers ----------
@@ -107,6 +107,7 @@ function compactTask(t: Task, projects: Map<number, string>, ms = memberNames(),
     status: t.status,
     due_date: t.due_date,
     due_time: t.due_time,
+    due_window: t.due_window ? `${t.due_window === 'week' ? 'week' : 'month'} starting ${t.due_window_start}` : undefined,
     priority: t.priority,
     for: describeAssignees(t.assignees, ms, gs),
     project: t.project_id ? projects.get(t.project_id) ?? null : null,
@@ -134,6 +135,8 @@ const projectNames = () => new Map(queryProjects({ status: 'all', archived: fals
 
 const zDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD');
 const zNames = z.array(z.string()).optional().describe('People or group names, e.g. ["Alex"] or ["Kids"]. Omit or empty = everyone.');
+const zWhen = z.enum(['this_week', 'next_week', 'this_month', 'next_month']).describe('A soft due date: sometime in that week or month, no fixed day. Use instead of due_date.');
+const weekStart = () => (getSetting('week_starts_on', 'monday') as WeekStart) || 'monday';
 const addIsoDays = (iso: string, days: number) => {
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(Date.UTC(y!, m! - 1, d! + days));
@@ -185,10 +188,11 @@ export function buildMcpServer(actor: Actor) {
     'add_todo',
     {
       title: 'Add a to-do',
-      description: 'Create a to-do. Natural phrasing in the title is understood ("tomorrow", "friday", "!high"), or set fields explicitly.',
+      description: 'Create a to-do. Natural phrasing in the title is understood ("tomorrow", "friday", "next week", "this month", "!high"), or set fields explicitly.',
       inputSchema: {
         title: z.string().min(1),
         due_date: zDate.optional(),
+        when: zWhen.optional(),
         due_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
         priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
         for: zNames,
@@ -201,11 +205,14 @@ export function buildMcpServer(actor: Actor) {
     },
     (a) =>
       run(() => {
-        const parsed = parseTaskText(a.title);
+        const parsed = parseTaskText(a.title, new Date(), weekStart());
+        const soft = a.when ? softDue(a.when, new Date(), weekStart()) : !a.due_date && parsed.due_window ? { due_window: parsed.due_window, due_window_start: parsed.due_window_start } : null;
         const t = createTask(
           {
             title: parsed.title || a.title,
-            due_date: a.due_date ?? parsed.due_date ?? null,
+            due_date: soft ? null : a.due_date ?? parsed.due_date ?? null,
+            due_window: soft?.due_window ?? null,
+            due_window_start: soft?.due_window_start ?? null,
             due_time: a.due_time ?? null,
             priority: a.priority ?? parsed.priority ?? 'normal',
             notes: a.notes ?? '',
@@ -228,6 +235,7 @@ export function buildMcpServer(actor: Actor) {
         id: z.number().int(),
         title: z.string().optional(),
         due_date: zDate.nullable().optional(),
+        when: zWhen.nullable().optional().describe('Soft due date instead of a day; null clears it.'),
         due_time: z.string().nullable().optional(),
         priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
         for: zNames,
@@ -238,9 +246,11 @@ export function buildMcpServer(actor: Actor) {
         repeat_weekdays: z.array(z.number().int().min(0).max(6)).optional().describe('For weekly: 0=Sunday..6=Saturday.'),
       },
     },
-    ({ id, for: names, project, repeat, repeat_every, repeat_weekdays, ...rest }) =>
+    ({ id, for: names, project, repeat, repeat_every, repeat_weekdays, when, ...rest }) =>
       run(() => {
         const patch: Record<string, unknown> = { ...rest };
+        if (when) Object.assign(patch, softDue(when, new Date(), weekStart()));
+        else if (when === null) patch.due_window = null;
         if (names !== undefined) patch.assignees = resolveAssignees(names);
         if (project !== undefined) patch.project_id = project === null ? null : resolveProject(project)?.id ?? null;
         if (repeat !== undefined) patch.recurrence = repeat === null ? null : { freq: repeat, interval: repeat_every ?? 1, weekdays: repeat_weekdays };
@@ -397,15 +407,16 @@ export function buildMcpServer(actor: Actor) {
 
   server.registerTool(
     'get_project',
-    { title: 'Get a project', description: 'Everything about one project: milestones, to-dos, shopping list, expenses, notes, links.', inputSchema: { project: z.string().describe('Project name or id') }, annotations: { readOnlyHint: true } },
+    { title: 'Get a project', description: 'Everything about one project: milestones, to-dos, shopping list, expenses, notes (project_notes), links.', inputSchema: { project: z.string().describe('Project name or id') }, annotations: { readOnlyHint: true } },
     ({ project }) =>
       run(() => {
         const ref = /^\d+$/.test(project) ? Number(project) : project;
-        const d = getProjectDetail(resolveProject(ref)!.id)!;
+        const { notes: _legacy, ...d } = getProjectDetail(resolveProject(ref)!.id, actor)!;
         const ms = memberNames();
         const gs = groupNames();
         return {
           ...d,
+          project_notes: d.project_notes.map((n) => ({ id: n.id, title: n.title, body: n.body, pinned: n.pinned, visible_to: n.member_ids.length ? n.member_ids.map((id) => ms.get(id)).filter(Boolean) : 'everyone' })),
           tasks: d.tasks.map((t) => compactTask(t, new Map([[d.id, d.name]]), ms, gs)),
           shopping_items: d.shopping_items.map((i) => compactItem(i, ms, gs)),
         };
@@ -452,21 +463,54 @@ export function buildMcpServer(actor: Actor) {
         start_date: zDate.nullable().optional(),
         target_date: zDate.nullable().optional(),
         budget: z.number().nullable().optional(),
-        notes: z.string().optional().describe('Replaces the project notes.'),
-        append_notes: z.string().optional().describe('Adds a paragraph to the end of the notes.'),
+        notes: z.string().optional().describe("Replaces the text of the project's first shared note. Prefer add_project_note / update_project_note."),
+        append_notes: z.string().optional().describe('Adds a new note to the project with this text.'),
       },
     },
     ({ project, append_notes, ...rest }) =>
       run(() => {
         const p = resolveProject(/^\d+$/.test(project) ? Number(project) : project)!;
         const patch: Record<string, unknown> = { ...rest };
-        if (append_notes) {
-          const cur = (db.prepare('SELECT notes FROM projects WHERE id = ?').get(p.id) as { notes: string }).notes;
-          patch.notes = cur ? `${cur}\n\n${append_notes}` : append_notes;
-        }
+        if (append_notes) createProjectNote(p.id, { body: append_notes }, actor);
         const d = updateProject(p.id, patch, actor);
         return { id: d.id, name: d.name, status: d.status, target_date: d.target_date, budget: d.budget, spent: d.spent };
       }),
+  );
+
+  server.registerTool(
+    'add_project_note',
+    {
+      title: 'Add a project note',
+      description: 'Add a note to a project. Notes can be private to some people, pinned, and shown on the Today dashboard.',
+      inputSchema: {
+        project: z.string(),
+        title: z.string().optional(),
+        body: z.string().min(1),
+        visible_to: zNames.describe('People who can see it. Omit or empty = everyone.'),
+        pinned: z.boolean().optional(),
+        show_on_today: z.boolean().optional().describe('Also show it on the Today dashboard.'),
+      },
+    },
+    ({ project, visible_to, ...n }) =>
+      run(() => {
+        const p = resolveProject(/^\d+$/.test(project) ? Number(project) : project)!;
+        return createProjectNote(p.id, { ...n, title: n.title ?? '', member_ids: resolveAssignees(visible_to).member_ids }, actor);
+      }),
+  );
+  server.registerTool(
+    'update_project_note',
+    {
+      title: 'Update a project note',
+      description: 'Change a project note by id (from get_project). Only provided fields change.',
+      inputSchema: { id: z.number().int(), title: z.string().optional(), body: z.string().optional(), visible_to: zNames, pinned: z.boolean().optional(), show_on_today: z.boolean().optional() },
+    },
+    ({ id, visible_to, ...patch }) => run(() => updateProjectNote(id, { ...patch, ...(visible_to !== undefined ? { member_ids: resolveAssignees(visible_to).member_ids } : {}) }, actor)),
+  );
+  server.registerTool('delete_project_note', { title: 'Delete a project note', description: 'Permanently delete a project note by id.', inputSchema: { id: z.number().int() }, annotations: { destructiveHint: true } }, ({ id }) =>
+    run(() => {
+      deleteProjectNote(id, actor);
+      return { deleted: id };
+    }),
   );
 
   server.registerTool('add_milestone', { title: 'Add a milestone', description: 'Add a milestone to a project.', inputSchema: { project: z.string(), title: z.string().min(1), due_date: zDate.optional(), description: z.string().optional() } }, ({ project, ...m }) =>
@@ -581,7 +625,7 @@ export function buildMcpServer(actor: Actor) {
 const INSTRUCTIONS = `Lar is a family's household hub: shared to-dos, shopping lists, home projects, recipes, and a weekly menu.
 Start with lar_overview to learn the people and groups. Refer to people and projects by name.
 "For" on a to-do or shopping item is who it applies to; empty means everyone in the household.
-Dates are YYYY-MM-DD in the household's local timezone.`;
+Dates are YYYY-MM-DD in the household's local timezone. A to-do can instead be due "this week", "next week", "this month", or "next month" (the when field) without a fixed day.`;
 
 // ---------- express mount ----------
 

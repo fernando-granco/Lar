@@ -1,7 +1,7 @@
 import { CalendarDays, Repeat, AlignLeft, Hammer, Flag } from 'lucide-react';
 import { useHousehold } from '@/lib/hooks';
 import { useDeferredCompletion } from '@/lib/completion';
-import { friendlyDate, dueTone } from '@/lib/format';
+import { dueLabel, taskTone } from '@/lib/format';
 import { CheckBox, AvatarStack, cx } from './ui';
 import type { Task } from '@shared/types';
 
@@ -9,18 +9,19 @@ export function TaskRow({ task, onOpen, projectName, showAssignees = true }: { t
   const { data: household } = useHousehold();
   const done = task.status === 'done';
   const completion = useDeferredCompletion('task', task.id, done);
-  const tone = dueTone(task.due_date, completion.checked);
+  const tone = taskTone(task, completion.checked);
+  const label = dueLabel(task);
   return (
     <div className={cx('rowitem', completion.checked && 'done', completion.pending && 'pending-done')} onClick={() => onOpen(task)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onOpen(task)}>
       <CheckBox on={completion.checked} onToggle={() => void completion.toggle()} />
       <div className="body">
         <div className="title">{task.title}</div>
         <div className="meta">
-          {task.due_date && (
-            <span className={cx('due', tone)}>
+          {label && (
+            <span className={cx('due', tone, task.due_window && 'soft')}>
               <CalendarDays />
-              {tone === 'overdue' ? `Overdue · ${friendlyDate(task.due_date)}` : friendlyDate(task.due_date)}
-              {task.due_time && ` · ${task.due_time}`}
+              {tone === 'overdue' ? `Overdue · ${label}` : label}
+              {task.due_date && task.due_time && ` · ${task.due_time}`}
             </span>
           )}
           {task.recurrence && <Repeat aria-label="Repeats" />}

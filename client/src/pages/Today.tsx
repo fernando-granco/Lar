@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckSquare, ShoppingBasket, Hammer, Plus, ArrowRight, CalendarDays } from 'lucide-react';
+import { CheckSquare, ShoppingBasket, Hammer, Plus, ArrowRight, CalendarDays, StickyNote, Pin, Lock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { keys, useHousehold, useSummary, useCurrentMember } from '@/lib/hooks';
-import { greeting, friendlyDate, today, addDays } from '@/lib/format';
+import { greeting, friendlyDate, TASK_BUCKETS, taskBucket } from '@/lib/format';
 import { Card, Button, Empty, Progress, Badge } from '@/components/ui';
 import { TaskRow } from '@/components/TaskRow';
 import { ShoppingRow } from '@/components/ShoppingRow';
@@ -16,7 +16,7 @@ import { PROJECT_STATUS } from '@/lib/format';
 import { usePrefs } from '@/lib/store';
 import { MenuCard } from '@/components/MenuCard';
 import { MobileQuickShopping } from '@/components/MobileQuickShopping';
-import type { Task, ShoppingItem } from '@shared/types';
+import type { Task, ShoppingItem, TodayNote } from '@shared/types';
 
 export function Today() {
   const me = useCurrentMember();
@@ -27,21 +27,30 @@ export function Today() {
   const shopQ = useQuery({ queryKey: keys.shoppingItems({ list: 1, status: 'open', member: me?.id }), queryFn: () => api.shoppingItems({ list: 1, status: 'open', member: me?.id }) });
   const projQ = useQuery({ queryKey: keys.projects({ status: 'active', member: me?.id }), queryFn: () => api.projects({ status: 'active', member: me?.id }) });
   const allProjQ = useQuery({ queryKey: keys.projects({ status: 'all' }), queryFn: () => api.projects({ status: 'all' }) });
+  const notesQ = useQuery({ queryKey: keys.todayNotes, queryFn: api.todayNotes, enabled: !prefs.dashboardHidden.includes('notes') });
   const [editTask, setEditTask] = useState<Task | null | 'new'>(null);
   const [editItem, setEditItem] = useState<ShoppingItem | null | 'new'>(null);
 
-  const t = today();
-  const weekEnd = addDays(t, 7);
+  // Overdue first, then today, tomorrow, the coming week, later, and (if wanted) no date, up to the chosen count.
   const tasks = tasksQ.data ?? [];
-  const attention = tasks.filter((x) => x.due_date && x.due_date <= t);
-  const upcoming = tasks.filter((x) => x.due_date && x.due_date > t && x.due_date <= weekEnd);
+  const limit = prefs.dashboardTodoLimit;
+  const ranked = TASK_BUCKETS.filter((b) => prefs.dashboardTodoUndated || b.key !== 'someday').map((b) => ({ ...b, items: tasks.filter((x) => taskBucket(x) === b.key) }));
+  const listed: { key: string; label: string; tone?: string; items: Task[] }[] = [];
+  let room = limit;
+  for (const b of ranked) {
+    if (!room || !b.items.length) continue;
+    listed.push({ ...b, items: b.items.slice(0, room) });
+    room -= Math.min(room, b.items.length);
+  }
+  const totalRanked = ranked.reduce((n, b) => n + b.items.length, 0);
+  const hiddenCount = totalRanked - (limit - room);
   const projectName = (id: number | null) => allProjQ.data?.find((p) => p.id === id)?.name;
   const dateLine = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const sectionOrder = (key: typeof prefs.dashboardOrder[number]) => prefs.dashboardOrder.indexOf(key);
 
   return (
     <div className="page">
-      <header className="page-head">
+      <header className="page-head hero">
         <div>
           <p className="eyebrow">{dateLine}</p>
           <h1>{greeting(me?.name)}</h1>
@@ -74,17 +83,21 @@ export function Today() {
 
       <div className="dashboard-sections">
         {!prefs.dashboardHidden.includes('todos') && <div style={{ order: sectionOrder('todos') }}>
-          <Card title={me ? 'Needs your attention' : 'Needs attention'} icon={CheckSquare} flush action={<Link to="/todos" className="btn btn-ghost btn-sm">All to-dos <ArrowRight /></Link>}>
-          {tasksQ.isLoading ? null : attention.length ? (
-            <div className="list">{attention.slice(0, 6).map((x) => <TaskRow key={x.id} task={x} onOpen={setEditTask} projectName={projectName(x.project_id)} />)}</div>
+          <Card title={me ? 'Your to-dos' : 'To-dos'} icon={CheckSquare} flush action={<Link to="/todos" className="btn btn-ghost btn-sm">All to-dos <ArrowRight /></Link>}>
+          {tasksQ.isLoading ? null : listed.length ? (
+            listed.map((b) => (
+              <div key={b.key} className="list-section">
+                <header className={b.tone}>{b.label} <span className="n">{ranked.find((r) => r.key === b.key)!.items.length}</span></header>
+                <div className="list">{b.items.map((x) => <TaskRow key={x.id} task={x} onOpen={setEditTask} projectName={projectName(x.project_id)} />)}</div>
+              </div>
+            ))
           ) : (
-            <Empty icon={CheckSquare} title="Nothing due today" hint={upcoming.length ? `${upcoming.length} coming up this week` : 'Enjoy the calm.'} />
+            <Empty icon={CheckSquare} title="Nothing to do" hint="Enjoy the calm." />
           )}
-          {upcoming.length > 0 && attention.length < 6 && (
-            <div className="list-section">
-              <header><CalendarDays size={13} /> Coming up</header>
-              <div className="list">{upcoming.slice(0, 6 - attention.length).map((x) => <TaskRow key={x.id} task={x} onOpen={setEditTask} projectName={projectName(x.project_id)} />)}</div>
-            </div>
+          {hiddenCount > 0 && (
+            <Link to="/todos" className="link-row">
+              <span className="muted">and {hiddenCount} more…</span>
+            </Link>
           )}
           </Card>
         </div>}
@@ -107,6 +120,14 @@ export function Today() {
         {!prefs.dashboardHidden.includes('calendar') && <div style={{ order: sectionOrder('calendar') }}><CalendarCard /></div>}
 
         {!prefs.dashboardHidden.includes('menu') && <div style={{ order: sectionOrder('menu') }}><MenuCard /></div>}
+
+        {!prefs.dashboardHidden.includes('notes') && !!notesQ.data?.length && (
+          <div style={{ order: sectionOrder('notes') }}>
+            <Card title="Pinned notes" icon={StickyNote}>
+              <div className="today-notes">{notesQ.data.map((n) => <TodayNoteCard key={n.id} note={n} />)}</div>
+            </Card>
+          </div>
+        )}
 
         {!!projQ.data?.length && !prefs.dashboardHidden.includes('projects') && (
         <div style={{ order: sectionOrder('projects') }}>
@@ -144,6 +165,20 @@ export function Today() {
       <ShoppingItemSheet open={editItem !== null} onClose={() => setEditItem(null)} item={editItem === 'new' ? null : editItem} listId={1} />
       {household && null}
     </div>
+  );
+}
+
+function TodayNoteCard({ note }: { note: TodayNote }) {
+  return (
+    <Link to={`/projects/${note.project_id}?tab=notes`} className="note-card" style={{ borderTopColor: note.color || note.project_color }}>
+      <div className="note-card-head">
+        {note.pinned && <Pin size={13} aria-label="Pinned" />}
+        {note.member_ids.length > 0 && <Lock size={13} aria-label="Private" />}
+        <b className="truncate">{note.title || 'Note'}</b>
+      </div>
+      {note.body && <p className="note-body clamp">{note.body}</p>}
+      <span className="note-foot"><Hammer size={12} /> {note.project_name}</span>
+    </Link>
   );
 }
 

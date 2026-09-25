@@ -4,6 +4,7 @@ import { handler, badRequest } from '../http.js';
 import { actorFrom, logChange } from '../context.js';
 import { todayIso } from '../repo.js';
 import { requireHousehold } from '../auth.js';
+import { adoptLegacyNotes } from './projects.js';
 
 export const backup = Router();
 
@@ -30,6 +31,8 @@ const TABLES = [
   'assignments',
   'expenses',
   'project_links',
+  'project_notes',
+  'project_note_members',
   'activity',
   'shopping_history',
   'calendars',
@@ -78,6 +81,8 @@ backup.post(
           }
           counts[t] = n;
         }
+        // Backups from before multiple notes keep a single notes field per project.
+        adoptLegacyNotes();
         const problems = db.pragma('foreign_key_check') as unknown[];
         if (problems.length) throw badRequest('The backup has broken references and was not restored.');
       } finally {

@@ -82,7 +82,7 @@ export function MemberPicker({ open, onClose, required = false }: { open: boolea
                 <Avatar member={m} size="lg" />
                 <span className="grow">
                   <b>{m.name}</b>
-                  {m.id === memberId && <small>This is you</small>}
+                  {(m.id === memberId || m.is_kid) && <small>{[m.id === memberId && 'This is you', m.is_kid && 'Kid'].filter(Boolean).join(' · ')}</small>}
                 </span>
                 {m.has_password && <Lock size={16} className="faint" aria-label="Password protected" />}
               </button>
@@ -91,8 +91,8 @@ export function MemberPicker({ open, onClose, required = false }: { open: boolea
           {!required && (
             <p className="faint" style={{ marginTop: 14, fontSize: 13 }}>
               Someone missing?{' '}
-              <Link to="/household" onClick={onClose} style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                Manage household
+              <Link to="/settings?section=people" onClick={onClose} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                Manage people in Settings
               </Link>
             </p>
           )}
