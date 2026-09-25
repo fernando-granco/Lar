@@ -7,6 +7,8 @@ Lar (Portuguese for "home") is a calm, self-hosted home hub for the people you l
 
 No accounts, no subscriptions, no ads, and none of your household's plans end up on someone else's server. You run the container; you own the data.
 
+![The Today dashboard: to-dos, the shopping list, the calendar, today's menu, and projects in motion](docs/screenshots/today.png)
+
 ## Why Lar
 
 Most household apps want an account, a subscription, or your data. Lar is built to be the opposite of that:
@@ -26,6 +28,17 @@ Most household apps want an account, a subscription, or your data. Lar is built 
 - A dashboard each device can rearrange, resize, and recolor for itself
 - Optional profile passwords and Cloudflare Access sign-in, kid-safe permissions, browser reminders, and local profile pictures
 - A REST API and an MCP server for trusted helpers like Hermes or Claude, off until an adult turns them on
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/project.png" alt="A project with milestones, to-dos, its own shopping list, and a budget"></td>
+    <td width="50%"><img src="docs/screenshots/shopping.png" alt="Shopping lists for the household and for each project"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A project: milestones, to-dos, shopping, and budget in one place</sub></td>
+    <td align="center"><sub>One shopping list for the house, plus one per project</sub></td>
+  </tr>
+</table>
 
 ## Quick start
 
